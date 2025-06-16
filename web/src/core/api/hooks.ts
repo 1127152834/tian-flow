@@ -52,7 +52,13 @@ export function useRAGProvider() {
       setLoading(false);
       return;
     }
-    setProvider(getConfig().rag.provider);
+    try {
+      const config = getConfig();
+      setProvider(config.rag?.provider || null);
+    } catch (error) {
+      console.warn("Failed to get RAG provider config:", error);
+      setProvider(null);
+    }
     setLoading(false);
   }, []);
 

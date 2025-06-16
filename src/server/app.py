@@ -5,7 +5,7 @@ import base64
 import json
 import logging
 import os
-from typing import Annotated, List, cast
+from typing import Annotated, List, Optional, cast
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query
@@ -39,8 +39,41 @@ from src.server.rag_request import (
     RAGResourcesResponse,
 )
 from src.server.config_request import ConfigResponse
+from src.server.database_datasource_request import (
+    DatabaseDatasourceListRequest,
+    DatabaseDatasourceListResponse,
+    DatabaseDatasourceCreateRequest,
+    DatabaseDatasourceUpdateRequest,
+    DatabaseDatasourceDetailResponse,
+    ConnectionTestRequest,
+    ConnectionTestResponse,
+    DatabaseTablesRequest,
+    DatabaseTablesResponse,
+)
+from src.server.text2sql_request import (
+    Text2SQLGenerationRequest,
+    Text2SQLGenerationResponse,
+    Text2SQLExecutionRequest,
+    Text2SQLExecutionResponse,
+    Text2SQLTrainingDataRequest,
+    Text2SQLTrainingDataResponse,
+    Text2SQLTrainingDataListRequest,
+    Text2SQLTrainingDataListResponse,
+    Text2SQLQueryHistoryRequest,
+    Text2SQLQueryHistoryListResponse,
+    Text2SQLRetrainRequest,
+    Text2SQLRetrainResponse,
+    Text2SQLStatisticsRequest,
+    Text2SQLStatisticsResponse,
+    Text2SQLDeleteResponse,
+)
 from src.llms.llm import get_configured_llm_models
 from src.tools import VolcengineTTS
+from src.services.database_datasource import database_datasource_service
+from src.services.text2sql import Text2SQLService
+
+# Initialize Text2SQL service
+text2sql_service = Text2SQLService()
 
 logger = logging.getLogger(__name__)
 
@@ -416,3 +449,142 @@ async def config():
         rag=RAGConfigResponse(provider=SELECTED_RAG_PROVIDER),
         models=get_configured_llm_models(),
     )
+
+
+# Database Datasource Management APIs
+@app.get("/api/database-datasources", response_model=DatabaseDatasourceListResponse)
+async def list_database_datasources(
+    database_type: Optional[str] = Query(None, description="Filter by database type"),
+    connection_status: Optional[str] = Query(None, description="Filter by connection status"),
+    search: Optional[str] = Query(None, description="Search keyword"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+):
+    """Get list of database datasources."""
+    try:
+        from src.models.database_datasource import DatabaseType, ConnectionStatus
+
+        # Convert string parameters to enums
+        db_type = DatabaseType(database_type) if database_type else None
+        conn_status = ConnectionStatus(connection_status) if connection_status else None
+
+        datasources = await database_datasource_service.list_datasources(
+            database_type=db_type,
+            connection_status=conn_status,
+            search=search,
+            limit=limit,
+            offset=offset,
+        )
+
+        # Get total count (for pagination)
+        all_datasources = await database_datasource_service.list_datasources()
+        total = len(all_datasources)
+
+        return DatabaseDatasourceListResponse(
+            datasources=datasources,
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+    except Exception as e:
+        logger.exception(f"Error listing database datasources: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR_DETAIL)
+
+
+@app.post("/api/database-datasources", response_model=DatabaseDatasourceDetailResponse)
+async def create_database_datasource(request: DatabaseDatasourceCreateRequest):
+    """Create a new database datasource."""
+    try:
+        datasource = await database_datasource_service.create_datasource(request)
+        return DatabaseDatasourceDetailResponse(**datasource.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Error creating database datasource: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR_DETAIL)
+
+
+@app.get("/api/database-datasources/{datasource_id}", response_model=DatabaseDatasourceDetailResponse)
+async def get_database_datasource(datasource_id: int):
+    """Get database datasource by ID."""
+    try:
+        datasource = await database_datasource_service.get_datasource(datasource_id)
+        if not datasource:
+            raise HTTPException(status_code=404, detail="Datasource not found")
+
+        return DatabaseDatasourceDetailResponse(**datasource.model_dump())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error getting database datasource: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR_DETAIL)
+
+
+@app.put("/api/database-datasources/{datasource_id}", response_model=DatabaseDatasourceDetailResponse)
+async def update_database_datasource(
+    datasource_id: int,
+    request: DatabaseDatasourceUpdateRequest
+):
+    """Update database datasource."""
+    try:
+        datasource = await database_datasource_service.update_datasource(datasource_id, request)
+        if not datasource:
+            raise HTTPException(status_code=404, detail="Datasource not found")
+
+        return DatabaseDatasourceDetailResponse(**datasource.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error updating database datasource: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR_DETAIL)
+
+
+@app.delete("/api/database-datasources/{datasource_id}")
+async def delete_database_datasource(datasource_id: int):
+    """Delete database datasource."""
+    try:
+        success = await database_datasource_service.delete_datasource(datasource_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Datasource not found")
+
+        return {"message": "Datasource deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error deleting database datasource: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR_DETAIL)
+
+
+@app.post("/api/database-datasources/{datasource_id}/test", response_model=ConnectionTestResponse)
+async def test_database_connection(
+    datasource_id: int,
+    request: ConnectionTestRequest = ConnectionTestRequest()
+):
+    """Test database connection."""
+    try:
+        result = await database_datasource_service.test_connection(
+            datasource_id,
+            timeout=request.timeout
+        )
+        return result
+    except Exception as e:
+        logger.exception(f"Error testing database connection: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR_DETAIL)
+
+
+@app.get("/api/database-datasources/{datasource_id}/schema", response_model=DatabaseTablesResponse)
+async def get_database_schema(datasource_id: int):
+    """Get database schema information."""
+    try:
+        schema = await database_datasource_service.get_database_schema(datasource_id)
+        if not schema:
+            raise HTTPException(status_code=404, detail="Datasource not found")
+
+        return DatabaseTablesResponse(**schema.model_dump())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error getting database schema: {str(e)}")
+        raise HTTPException(status_code=500, detail=INTERNAL_SERVER_ERROR_DETAIL)

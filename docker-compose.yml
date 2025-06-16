@@ -1,18 +1,166 @@
+version: '3.8'
+
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres-vector-db
+    environment:
+      POSTGRES_DB: aolei
+      POSTGRES_USER: aolei
+      POSTGRES_PASSWORD: aolei123456
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-pgvector.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aolei -d aolei"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - deer-flow-network
+
+  # Redis作为Celery的消息代理和结果后端
+  redis:
+    image: redis:7-alpine
+    container_name: aolei-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - deer-flow-network
+
+  # Celery Worker - 异步任务执行器
+  celery-worker:
+    build: .
+    container_name: aolei-celery-worker
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://aolei:aolei123456@postgres:5432/aolei
+      - REDIS_URL=redis://redis:6379/0
+      - PROJECT_NAME=aolei
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    command: >
+      sh -c "
+        echo 'Waiting for Redis and PostgreSQL...' &&
+        sleep 15 &&
+        echo 'Starting Celery Worker with all queues...' &&
+        uv run celery -A src.tasks.celery_app worker --loglevel=info --concurrency=4 --queues=knowledge_base,documents,indexing,text2sql,celery
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "uv run celery -A src.tasks.celery_app inspect ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - deer-flow-network
+
+  # Celery Beat - 定时任务调度器
+  celery-beat:
+    build: .
+    container_name: aolei-celery-beat
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://aolei:aolei123456@postgres:5432/aolei
+      - REDIS_URL=redis://redis:6379/0
+      - PROJECT_NAME=aolei
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    command: >
+      sh -c "
+        echo 'Waiting for Redis and PostgreSQL...' &&
+        sleep 15 &&
+        echo 'Starting Celery Beat...' &&
+        uv run celery -A src.tasks.celery_app beat --loglevel=info --schedule=/app/logs/celerybeat-schedule
+      "
+    networks:
+      - deer-flow-network
+
+  # Flower - Celery监控界面
+  flower:
+    build: .
+    container_name: aolei-flower
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - celery-worker
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://aolei:aolei123456@postgres:5432/aolei
+      - REDIS_URL=redis://redis:6379/0
+      - PROJECT_NAME=aolei
+      - PYTHONPATH=/app/src
+    ports:
+      - "5555:5555"
+    volumes:
+      - ./src:/app/src
+    command: >
+      sh -c "
+        echo 'Waiting for Celery Worker...' &&
+        sleep 20 &&
+        echo 'Starting Flower...' &&
+        uv run celery -A src.tasks.celery_app flower --host=0.0.0.0 --port=5555
+      "
+    networks:
+      - deer-flow-network
+
+  后端API服务（包含WebSocket支持）
   backend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: deer-flow-backend
+    container_name: aolei-backend
     ports:
       - "8000:8000"
-    env_file:
-      - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://aolei:aolei123456@postgres:5432/aolei
+      - REDIS_URL=redis://redis:6379/0
+      - PROJECT_NAME=aolei
     volumes:
-      - ./conf.yaml:/app/conf.yaml
+      - ./src:/app/src
+      - ./logs:/app/logs
+    command: >
+      sh -c "
+        echo 'Waiting for dependencies...' &&
+        sleep 25 &&
+        echo 'Starting API server with WebSocket support...' &&
+        uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+      "
     restart: unless-stopped
     networks:
       - deer-flow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      celery-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     build:
@@ -20,9 +168,9 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-    container_name: deer-flow-frontend
+    container_name: aolei-frontend
     ports:
-      - "3000:3000"
+      - "15371:3000"
     env_file:
       - .env
     depends_on:
@@ -34,3 +182,9 @@ services:
 networks:
   deer-flow-network:
     driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

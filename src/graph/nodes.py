@@ -34,6 +34,45 @@ from ..config import SELECTED_SEARCH_ENGINE, SearchEngine
 logger = logging.getLogger(__name__)
 
 
+def create_fallback_plan(state: State, response_content: str) -> dict:
+    """
+    Create a fallback plan when LLM response is invalid or unparseable.
+    """
+    research_topic = state.get("research_topic", "Research Task")
+    locale = state.get("locale", "en-US")
+
+    # Extract any meaningful content from the response
+    title = research_topic
+    thought = f"Based on the request: {research_topic}"
+
+    # Try to extract steps from the response if it contains step-like content
+    steps = []
+    if "research" in response_content.lower() or "search" in response_content.lower():
+        steps.append({
+            "need_search": True,
+            "title": f"Research on {research_topic}",
+            "description": f"Conduct research to gather information about {research_topic}",
+            "step_type": "research"
+        })
+
+    if not steps:
+        # Default step if nothing can be extracted
+        steps.append({
+            "need_search": True,
+            "title": "General Research",
+            "description": "Gather relevant information for the research task",
+            "step_type": "research"
+        })
+
+    return {
+        "locale": locale,
+        "has_enough_context": False,
+        "thought": thought,
+        "title": title,
+        "steps": steps
+    }
+
+
 @tool
 def handoff_to_planner(
     research_topic: Annotated[str, "The topic of the research task to be handed off."],
@@ -116,34 +155,57 @@ def planner_node(
         return Command(goto="reporter")
 
     full_response = ""
-    if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
-        response = llm.invoke(messages)
-        full_response = response.model_dump_json(indent=4, exclude_none=True)
-    else:
-        response = llm.stream(messages)
-        for chunk in response:
-            full_response += chunk.content
+    curr_plan = None
+
+    try:
+        if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
+            response = llm.invoke(messages)
+            # Check if response is a Plan object or something else
+            if hasattr(response, 'model_dump'):
+                # It's a Pydantic model
+                full_response = response.model_dump_json(indent=4, exclude_none=True)
+                curr_plan = response.model_dump()
+            else:
+                # It's not a Plan object, treat as raw response
+                logger.warning(f"Unexpected response type from structured output: {type(response)}")
+                full_response = str(response)
+                # Try to create a fallback plan
+                curr_plan = create_fallback_plan(state, full_response)
+        else:
+            response = llm.stream(messages)
+            for chunk in response:
+                full_response += chunk.content
+            try:
+                curr_plan = json.loads(repair_json_output(full_response))
+            except json.JSONDecodeError:
+                logger.warning("Planner response is not a valid JSON")
+                curr_plan = create_fallback_plan(state, full_response)
+    except Exception as e:
+        logger.error(f"Error processing planner response: {e}")
+        curr_plan = create_fallback_plan(state, full_response or "Error occurred")
+
     logger.debug(f"Current state messages: {state['messages']}")
     logger.info(f"Planner response: {full_response}")
 
-    try:
-        curr_plan = json.loads(repair_json_output(full_response))
-    except json.JSONDecodeError:
-        logger.warning("Planner response is not a valid JSON")
-        if plan_iterations > 0:
-            return Command(goto="reporter")
-        else:
-            return Command(goto="__end__")
+    # Validate curr_plan
+    if not curr_plan or not isinstance(curr_plan, dict):
+        logger.warning("Invalid plan format, using fallback")
+        curr_plan = create_fallback_plan(state, full_response)
+
     if curr_plan.get("has_enough_context"):
         logger.info("Planner response has enough context.")
-        new_plan = Plan.model_validate(curr_plan)
-        return Command(
-            update={
-                "messages": [AIMessage(content=full_response, name="planner")],
-                "current_plan": new_plan,
-            },
-            goto="reporter",
-        )
+        try:
+            new_plan = Plan.model_validate(curr_plan)
+            return Command(
+                update={
+                    "messages": [AIMessage(content=full_response, name="planner")],
+                    "current_plan": new_plan,
+                },
+                goto="reporter",
+            )
+        except Exception as e:
+            logger.error(f"Failed to validate plan with enough context: {e}")
+            # Fall through to human feedback
     return Command(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
@@ -195,11 +257,21 @@ def human_feedback_node(
         else:
             return Command(goto="__end__")
 
+    # Validate and create Plan object
+    try:
+        if isinstance(new_plan, dict):
+            validated_plan = Plan.model_validate(new_plan)
+        else:
+            validated_plan = new_plan  # Already a Plan object
+    except Exception as e:
+        logger.error(f"Failed to validate plan: {e}")
+        return Command(goto="__end__")
+
     return Command(
         update={
-            "current_plan": Plan.model_validate(new_plan),
+            "current_plan": validated_plan,
             "plan_iterations": plan_iterations,
-            "locale": new_plan["locale"],
+            "locale": new_plan.get("locale", "en-US") if isinstance(new_plan, dict) else validated_plan.locale,
         },
         goto=goto,
     )

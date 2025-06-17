@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Database datasource service for DeerFlow.
+Database datasource service for Olight.
 
 Provides database connection testing, schema extraction, and connection management.
 Uses PostgreSQL database for persistence instead of configuration files.

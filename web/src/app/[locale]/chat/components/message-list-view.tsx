@@ -242,8 +242,8 @@ function MessageBubble({
   return (
     <div
       className={cn(
-        `group flex w-fit max-w-[85%] flex-col rounded-2xl px-4 py-3 text-nowrap shadow`,
-        message.role === "user" && "bg-brand rounded-ee-none",
+        `group flex w-fit max-w-[95%] flex-col rounded-2xl px-4 py-3 shadow`,
+        message.role === "user" && "bg-brand rounded-ee-none max-w-[85%]",
         message.role === "assistant" && "bg-card rounded-es-none",
         className,
       )}

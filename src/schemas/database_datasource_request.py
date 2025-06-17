@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Database datasource request/response models for DeerFlow API.
+Database datasource request/response models for Olight API.
 Following deer-flow's API pattern with separate request/response files.
 """
 

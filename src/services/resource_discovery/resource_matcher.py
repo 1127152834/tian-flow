@@ -7,7 +7,7 @@
 import logging
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -19,6 +19,7 @@ from src.models.resource_discovery import (
     ResourceMatchHistoryCreate,
     UserFeedback
 )
+from src.config.resource_discovery import get_resource_discovery_config
 from src.llms.embedding import embed_query
 from src.tools.api_tools import execute_api, list_available_apis, get_api_details
 from src.tools.text2sql_tools import text2sql_query, generate_sql_only, get_training_examples
@@ -37,17 +38,19 @@ class ResourceMatcher:
         Args:
             embedding_service: 嵌入服务（已弃用，使用统一的嵌入服务）
         """
-        self.similarity_threshold = 0.3
-        self.confidence_weights = {
-            "similarity": 0.6,
-            "usage_history": 0.2,
-            "performance": 0.1,
-            "context": 0.1
-        }
+        # 从配置文件加载权重配置
+        config = get_resource_discovery_config()
+
+        self.similarity_threshold = config.vector_config.similarity_threshold
+        self.confidence_weights = config.matcher_config.confidence_weights
+        self.vector_type_weights = config.matcher_config.vector_type_weights
+        self.resource_type_weights = config.matcher_config.resource_type_weights
 
         logger.info(f"初始化资源匹配器:")
         logger.info(f"  相似度阈值: {self.similarity_threshold}")
         logger.info(f"  置信度权重: {self.confidence_weights}")
+        logger.info(f"  向量类型权重: {self.vector_type_weights}")
+        logger.info(f"  资源类型权重: {len(self.resource_type_weights)} 种类型")
         logger.info(f"  使用统一嵌入服务: BASE_EMBEDDING")
     
     async def match_resources(
@@ -61,7 +64,7 @@ class ResourceMatcher:
         """匹配用户查询到最相关的资源"""
         
         try:
-            start_time = datetime.utcnow()
+            start_time = datetime.now(timezone.utc)
             
             # 1. 向量化查询
             query_vector = await self._get_query_embedding(user_query)
@@ -95,7 +98,7 @@ class ResourceMatcher:
             # 6. 记录匹配历史
             await self._record_match_history(
                 session, user_query, final_matches, 
-                (datetime.utcnow() - start_time).total_seconds() * 1000
+                (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
             )
             
             logger.info(f"匹配完成: 查询='{user_query}', 结果数={len(final_matches)}")
@@ -126,21 +129,23 @@ class ResourceMatcher:
             return [0.0] * 1536
     
     async def _search_similar_resources(
-        self, 
+        self,
         session: Session,
-        query_vector: List[float], 
+        query_vector: List[float],
         limit: int,
         resource_types: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """向量相似度搜索"""
+        """向量相似度搜索 - 获取所有向量类型进行多向量匹配"""
         try:
             # 构建查询条件
             type_condition = ""
             if resource_types:
                 type_placeholders = ", ".join([f"'{t}'" for t in resource_types])
                 type_condition = f"AND rr.resource_type IN ({type_placeholders})"
-            
-            # 向量相似度搜索查询 - 使用 CAST 确保类型匹配
+
+            # 向量相似度搜索查询 - 获取所有向量类型
+            query_vector_str = f"[{','.join(map(str, query_vector))}]"
+
             query_sql = text(f"""
                 SELECT
                     rr.resource_id,
@@ -160,86 +165,118 @@ class ResourceMatcher:
                 JOIN resource_discovery.resource_vectors rv ON rr.resource_id = rv.resource_id
                 WHERE rr.is_active = true
                 AND rr.status = 'active'
-                AND rv.vector_type = 'composite'
                 {type_condition}
                 ORDER BY rv.embedding <=> CAST(:query_vector AS vector)
                 LIMIT :limit_num
             """)
-            
+
             result = session.execute(query_sql, {
-                "query_vector": query_vector,
-                "limit_num": limit
+                "query_vector": query_vector_str,
+                "limit_num": limit * 4  # 获取更多结果，因为每个资源有4种向量类型
             })
-            
-            resources = []
+
+            # 按资源ID分组，收集所有向量类型的相似度
+            resource_vectors = {}
             for row in result.fetchall():
-                resource = {
-                    "resource_id": row.resource_id,
-                    "resource_name": row.resource_name,
-                    "resource_type": row.resource_type,
-                    "description": row.description,
-                    "capabilities": row.capabilities,
-                    "tags": row.tags,
-                    "metadata": row.metadata,
-                    "usage_count": row.usage_count,
-                    "success_rate": row.success_rate,
-                    "avg_response_time": row.avg_response_time,
-                    "vector_type": row.vector_type,
-                    "vector_content": row.content,
+                resource_id = row.resource_id
+
+                if resource_id not in resource_vectors:
+                    resource_vectors[resource_id] = {
+                        "resource_id": row.resource_id,
+                        "resource_name": row.resource_name,
+                        "resource_type": row.resource_type,
+                        "description": row.description,
+                        "capabilities": row.capabilities,
+                        "tags": row.tags,
+                        "metadata": row.metadata,
+                        "usage_count": row.usage_count,
+                        "success_rate": row.success_rate,
+                        "avg_response_time": row.avg_response_time,
+                        "vectors": {}
+                    }
+
+                # 添加向量类型和相似度
+                resource_vectors[resource_id]["vectors"][row.vector_type] = {
+                    "content": row.content,
                     "similarity_score": float(row.similarity_score)
                 }
-                resources.append(resource)
-            
-            logger.info(f"向量搜索找到 {len(resources)} 个相似资源")
+
+            # 转换为列表格式
+            resources = list(resource_vectors.values())
+
+            logger.info(f"向量搜索找到 {len(resources)} 个资源，包含多种向量类型")
             return resources
-            
+
         except Exception as e:
             logger.error(f"向量相似度搜索失败: {e}")
             return []
     
     async def _intelligent_rerank(
-        self, 
+        self,
         session: Session,
-        user_query: str, 
+        user_query: str,
         resources: List[Dict[str, Any]]
     ) -> List[ResourceMatch]:
-        """智能重排序和置信度计算"""
+        """智能重排序和置信度计算 - 使用多向量类型加权匹配"""
         matches = []
-        
+
         for resource in resources:
             try:
-                # 1. 基础相似度分数
-                similarity_score = resource.get("similarity_score", 0.0)
-                
+                # 1. 多向量类型加权相似度计算（参考 Ti-Flow）
+                vector_similarities = resource.get("vectors", {})
+                weighted_similarity = self._calculate_multi_vector_similarity(
+                    resource.get("resource_type", ""), vector_similarities
+                )
+
                 # 2. 使用历史偏好
                 usage_boost = await self._calculate_usage_preference(session, resource)
-                
+
                 # 3. 性能指标加权
                 performance_boost = self._calculate_performance_score(resource)
-                
+
                 # 4. 上下文相关性
                 context_boost = await self._calculate_context_relevance(user_query, resource)
-                
+
                 # 5. 综合置信度计算
                 confidence_score = (
-                    similarity_score * self.confidence_weights["similarity"] +
+                    weighted_similarity * self.confidence_weights["similarity"] +
                     usage_boost * self.confidence_weights["usage_history"] +
                     performance_boost * self.confidence_weights["performance"] +
                     context_boost * self.confidence_weights["context"]
                 )
-                
+
                 # 6. 生成匹配推理
-                reasoning = self._generate_match_reasoning(
-                    user_query, resource, similarity_score, confidence_score
+                reasoning = self._generate_multi_vector_reasoning(
+                    user_query, resource, vector_similarities, confidence_score
                 )
                 
                 # 7. 创建匹配结果
+                # 确保所有必需字段都有默认值
+                resource_data = {
+                    "id": resource.get("id", 0),
+                    "resource_id": resource.get("resource_id", ""),
+                    "resource_name": resource.get("resource_name", ""),
+                    "resource_type": resource.get("resource_type", ""),
+                    "description": resource.get("description"),
+                    "capabilities": resource.get("capabilities", []),
+                    "tags": resource.get("tags", []),
+                    "metadata": resource.get("metadata", {}),
+                    "is_active": resource.get("is_active", True),
+                    "status": resource.get("status", "active"),
+                    "source_table": resource.get("source_table", ""),
+                    "source_id": resource.get("source_id", 0),
+                    "vectorization_status": resource.get("vectorization_status", "pending"),
+                    "usage_count": resource.get("usage_count", 0),
+                    "success_rate": resource.get("success_rate", 1.0),
+                    "avg_response_time": resource.get("avg_response_time", 0),
+                    "vector_updated_at": resource.get("vector_updated_at"),
+                    "created_at": resource.get("created_at", "2024-01-01T00:00:00"),
+                    "updated_at": resource.get("updated_at", "2024-01-01T00:00:00")
+                }
+
                 match = ResourceMatch(
-                    resource=ResourceRegistryResponse(**{
-                        k: v for k, v in resource.items() 
-                        if k in ResourceRegistryResponse.__fields__
-                    }),
-                    similarity_score=similarity_score,
+                    resource=ResourceRegistryResponse(**resource_data),
+                    similarity_score=weighted_similarity,
                     confidence_score=confidence_score,
                     reasoning=reasoning,
                     final_score=confidence_score
@@ -337,7 +374,98 @@ class ResourceMatcher:
         except Exception as e:
             logger.error(f"计算上下文相关性失败: {e}")
             return 0.5
-    
+
+    def _calculate_multi_vector_similarity(
+        self,
+        resource_type: str,
+        vector_similarities: Dict[str, Dict[str, Any]]
+    ) -> float:
+        """计算多向量类型的加权相似度（参考 Ti-Flow）"""
+        try:
+            # 获取该资源类型的权重配置
+            weights = self.resource_type_weights.get(resource_type, self.vector_type_weights)
+
+            weighted_score = 0.0
+            total_weight = 0.0
+
+            for vector_type, weight in weights.items():
+                if vector_type in vector_similarities:
+                    similarity = vector_similarities[vector_type].get("similarity_score", 0.0)
+                    weighted_score += similarity * weight
+                    total_weight += weight
+
+            # 如果没有匹配的向量类型，使用最高相似度
+            if total_weight == 0 and vector_similarities:
+                similarities = [v.get("similarity_score", 0.0) for v in vector_similarities.values()]
+                return max(similarities) if similarities else 0.0
+
+            # 归一化权重
+            if total_weight > 0:
+                weighted_score = weighted_score / total_weight
+
+            return weighted_score
+
+        except Exception as e:
+            logger.error(f"多向量相似度计算失败: {e}")
+            return 0.0
+
+    def _generate_multi_vector_reasoning(
+        self,
+        user_query: str,
+        resource: Dict[str, Any],
+        vector_similarities: Dict[str, Dict[str, Any]],
+        confidence_score: float
+    ) -> str:
+        """生成多向量匹配推理说明（参考 Ti-Flow）"""
+        try:
+            resource_name = resource.get("resource_name", "")
+            resource_type = resource.get("resource_type", "")
+
+            reasoning_parts = []
+
+            # 找出最高相似度的向量类型
+            if vector_similarities:
+                max_vector_type = max(
+                    vector_similarities.keys(),
+                    key=lambda k: vector_similarities[k].get("similarity_score", 0.0)
+                )
+                max_similarity = vector_similarities[max_vector_type].get("similarity_score", 0.0)
+
+                # 相似度等级描述
+                if max_similarity > 0.8:
+                    reasoning_parts.append("高度匹配")
+                elif max_similarity > 0.6:
+                    reasoning_parts.append("较好匹配")
+                else:
+                    reasoning_parts.append("一般匹配")
+
+                # 向量类型描述
+                vector_type_descriptions = {
+                    "name": "名称匹配",
+                    "description": "描述匹配",
+                    "capabilities": "能力匹配",
+                    "composite": "综合匹配"
+                }
+
+                if max_vector_type in vector_type_descriptions:
+                    reasoning_parts.append(f"{vector_type_descriptions[max_vector_type]}: {max_similarity:.2f}")
+
+                # 资源类型说明
+                reasoning_parts.append(f"资源类型: {resource_type}")
+
+                # 特殊处理 TEXT2SQL 资源
+                if resource_type == "TEXT2SQL":
+                    reasoning_parts.append("SQL查询示例")
+
+            else:
+                reasoning_parts.append("无向量匹配")
+
+            return " | ".join(reasoning_parts)
+
+        except Exception as e:
+            logger.error(f"生成推理失败: {e}")
+            return f"匹配推理生成失败: {str(e)}"
+
     def _generate_match_reasoning(
         self, 
         user_query: str, 
@@ -426,10 +554,10 @@ class ResourceMatcher:
             session.execute(insert_query, {
                 "user_query": user_query,
                 "query_hash": query_hash,
-                "matched_resource_ids": matched_resource_ids,
-                "similarity_scores": similarity_scores,
-                "confidence_scores": confidence_scores,
-                "reasoning": history_data.reasoning,
+                "matched_resource_ids": json.dumps(matched_resource_ids),  # 转换为 JSON 字符串
+                "similarity_scores": json.dumps(similarity_scores),  # 转换为 JSON 字符串
+                "confidence_scores": json.dumps(confidence_scores),  # 转换为 JSON 字符串
+                "reasoning": json.dumps(history_data.reasoning),  # 转换为 JSON 字符串
                 "response_time": response_time
             })
             session.commit()

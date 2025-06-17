@@ -1,5 +1,5 @@
 /**
- * Resource Discovery API client for DeerFlow
+ * Resource Discovery API client for Olight
  *
  * Provides TypeScript interfaces and API functions for Resource Discovery functionality
  * including resource discovery, synchronization, and management.
@@ -130,10 +130,70 @@ export interface SystemStatus {
 // API Functions
 const API_BASE = 'resource-discovery';
 
+// Test Interface Types
+export interface ResourceTestRequest {
+  query: string;
+  top_k?: number;
+  min_confidence?: number;
+  resource_types?: string[];
+}
+
+export interface ResourceTestResult {
+  resource_id: string;
+  resource_name: string;
+  resource_type: string;
+  description: string;
+  capabilities: string[];
+  similarity_score: number;
+  confidence_score: number;
+  confidence: 'high' | 'medium' | 'low';
+  reasoning: string;
+  detailed_scores: {
+    similarity: number;
+    confidence: number;
+  };
+}
+
+export interface ResourceTestResponse {
+  query: string;
+  total_matches: number;
+  matches: ResourceTestResult[];
+  best_match: ResourceTestResult | null;
+  processing_time: number;
+  parameters: {
+    top_k: number;
+    min_confidence: number;
+    resource_types: string[] | null;
+  };
+}
+
 export const resourceDiscoveryApi = {
-  // 注意：discoverResources 接口已移除
-  // 资源发现现在通过智能体工具提供，不再是用户API
-  // 请使用智能体工具进行资源发现
+  // Resource Discovery Testing
+  async testResourceMatching(request: ResourceTestRequest): Promise<ResourceTestResponse> {
+    const response = await fetch(resolveServiceURL(`/api/${API_BASE}/test-match`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: request.query,
+        top_k: request.top_k || 5,
+        min_confidence: request.min_confidence || 0.1,
+        resource_types: request.resource_types || null,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to test resource matching');
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || '资源匹配测试失败');
+    }
+
+    return result.data;
+  },
 
   // Resource Management
   async getResources(params: {
@@ -171,7 +231,35 @@ export const resourceDiscoveryApi = {
     return response.json();
   },
 
-  // Resource Synchronization
+  // Change Detection
+  async detectChanges(previewOnly: boolean = true): Promise<any> {
+    const response = await fetch(resolveServiceURL(`${API_BASE}/change-detection?preview_only=${previewOnly}`), {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to detect changes');
+    }
+
+    return response.json();
+  },
+
+  // Incremental Synchronization
+  async incrementalSync(forceFullSync: boolean = false, asyncMode: boolean = true): Promise<any> {
+    const response = await fetch(resolveServiceURL(`${API_BASE}/incremental-sync?force_full_sync=${forceFullSync}&async_mode=${asyncMode}`), {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to perform incremental sync');
+    }
+
+    return response.json();
+  },
+
+  // Resource Synchronization (Legacy)
   async syncResources(forceFullSync: boolean = false): Promise<SyncResourcesResponse> {
     const response = await fetch(resolveServiceURL(`${API_BASE}/sync?force_full_sync=${forceFullSync}`), {
       method: 'POST',

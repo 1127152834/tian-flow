@@ -78,7 +78,17 @@ class ResourceSynchronizer:
                 "message": f"增量同步失败: {str(e)}",
                 "total_processing_time": str(datetime.utcnow() - start_time)
             }
-    
+
+    async def incremental_sync(self, force_full_sync: bool = False) -> Dict[str, Any]:
+        """增量同步资源 (API 适配方法)"""
+        from src.database import get_db_session
+
+        session = next(get_db_session())
+        try:
+            return await self.sync_and_vectorize_incremental(session, force_full_sync)
+        finally:
+            session.close()
+
     async def _execute_incremental_sync(
         self, 
         session: Session,

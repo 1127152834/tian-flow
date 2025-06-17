@@ -130,7 +130,7 @@ export const getChatStreamSettings = () => {
 };
 
 export function setReportStyle(
-  value: "academic" | "popular_science" | "news" | "social_media",
+  value: "technical_report" | "operation_manual" | "quality_documentation" | "business_report",
 ) {
   useSettingsStore.setState((state) => ({
     general: {

@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 import { Check, Copy } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useMemo, useState } from "react";
 import ReactMarkdown, {
   type Options as ReactMarkdownOptions,
 } from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -35,6 +38,7 @@ export function Markdown({
   animated?: boolean;
   checkLinkCredibility?: boolean;
 }) {
+  const { resolvedTheme } = useTheme();
   const components: ReactMarkdownOptions["components"] = useMemo(() => {
     return {
       a: ({ href, children }) => (
@@ -47,8 +51,45 @@ export function Markdown({
           <Image className="rounded" src={src as string} alt={alt ?? ""} />
         </a>
       ),
+      code: ({ node, inline, className, children, ...props }) => {
+        const match = /language-(\w+)/.exec(className || "");
+        const language = match ? match[1] : "";
+
+        if (!inline && language) {
+          return (
+            <div className="relative">
+              <SyntaxHighlighter
+                style={resolvedTheme === 'dark' ? oneDark : oneLight}
+                language={language}
+                PreTag="div"
+                className="rounded-lg !bg-muted !text-sm"
+                {...props}
+              >
+                {String(children).replace(/\n$/, "")}
+              </SyntaxHighlighter>
+              {enableCopy && (
+                <div className="absolute right-2 top-2">
+                  <CopyButton content={String(children)} />
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <code
+            className={cn(
+              "relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold",
+              className
+            )}
+            {...props}
+          >
+            {children}
+          </code>
+        );
+      },
     };
-  }, [checkLinkCredibility]);
+  }, [checkLinkCredibility, enableCopy, resolvedTheme]);
 
   const rehypePlugins = useMemo(() => {
     if (animated) {

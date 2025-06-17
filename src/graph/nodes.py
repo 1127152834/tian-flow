@@ -12,27 +12,31 @@ from langchain_core.tools import tool
 from langgraph.types import Command, interrupt
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-from src.agents import create_agent, create_agent_async
-from src.tools.search import LoggedTavilySearch
+from src.agents import create_agent
 from src.tools import (
-    crawl_tool,
-    get_web_search_tool,
-    get_retriever_tool,
     python_repl_tool,
-    # 新增的查询工具
+    # API工具
     execute_api,
     list_available_apis,
     get_api_details,
+    # Text2SQL工具
     text2sql_query,
+    smart_text2sql_query,
     generate_sql_only,
     get_training_examples,
     validate_sql,
+    # 数据库工具
     database_query,
     list_databases,
+    search_databases,
+    find_database_by_name,
+    get_database_info,
     test_database_connection,
     # 图表生成工具
     generate_chart,
 )
+from src.tools.resource_discovery_tool import discover_resources
+from src.agents import create_agent
 
 from src.config.agents import AGENT_LLM_MAP
 from src.config.configuration import Configuration
@@ -42,48 +46,8 @@ from src.prompts.template import apply_prompt_template
 from src.utils.json_utils import repair_json_output
 
 from .types import State
-from ..config import SELECTED_SEARCH_ENGINE, SearchEngine
 
 logger = logging.getLogger(__name__)
-
-
-def create_fallback_plan(state: State, response_content: str) -> dict:
-    """
-    Create a fallback plan when LLM response is invalid or unparseable.
-    """
-    research_topic = state.get("research_topic", "Research Task")
-    locale = state.get("locale", "en-US")
-
-    # Extract any meaningful content from the response
-    title = research_topic
-    thought = f"Based on the request: {research_topic}"
-
-    # Try to extract steps from the response if it contains step-like content
-    steps = []
-    if "research" in response_content.lower() or "search" in response_content.lower():
-        steps.append({
-            "need_search": True,
-            "title": f"Research on {research_topic}",
-            "description": f"Conduct research to gather information about {research_topic}",
-            "step_type": "research"
-        })
-
-    if not steps:
-        # Default step if nothing can be extracted
-        steps.append({
-            "need_search": True,
-            "title": "General Research",
-            "description": "Gather relevant information for the research task",
-            "step_type": "research"
-        })
-
-    return {
-        "locale": locale,
-        "has_enough_context": False,
-        "thought": thought,
-        "title": title,
-        "steps": steps
-    }
 
 
 @tool
@@ -99,45 +63,25 @@ def handoff_to_planner(
 
 @tool
 def handoff_to_data_analyst(
-    data_analysis_task: Annotated[str, "The data analysis task to be handed off."],
+    data_query: Annotated[str, "The data analysis request to be handed off."],
     locale: Annotated[str, "The user's detected language locale (e.g., en-US, zh-CN)."],
 ):
-    """Handoff to data analyst agent for data analysis and chart generation tasks."""
+    """Handoff to data analyst for direct data analysis, visualization, and Q&A."""
     # This tool is not returning anything: we're just using it
-    # as a way for LLM to signal that it needs to hand off to data analyst agent
+    # as a way for LLM to signal that it needs to hand off to data analyst
     return
 
 
 def background_investigation_node(state: State, config: RunnableConfig):
     logger.info("background investigation node is running.")
-    configurable = Configuration.from_runnable_config(config)
     query = state.get("research_topic")
-    background_investigation_results = None
-    if SELECTED_SEARCH_ENGINE == SearchEngine.TAVILY.value:
-        searched_content = LoggedTavilySearch(
-            max_results=configurable.max_search_results
-        ).invoke(query)
-        if isinstance(searched_content, list):
-            background_investigation_results = [
-                f"## {elem['title']}\n\n{elem['content']}" for elem in searched_content
-            ]
-            return {
-                "background_investigation_results": "\n\n".join(
-                    background_investigation_results
-                )
-            }
-        else:
-            logger.error(
-                f"Tavily search returned malformed response: {searched_content}"
-            )
-    else:
-        background_investigation_results = get_web_search_tool(
-            configurable.max_search_results
-        ).invoke(query)
+
+    # 使用数据库查询替代网络搜索进行背景调研
+    logger.info(f"使用数据库查询进行背景调研: {query}")
+    background_investigation_results = f"基于查询 '{query}' 的数据库调研结果将由专门的数据分析师处理。"
+
     return {
-        "background_investigation_results": json.dumps(
-            background_investigation_results, ensure_ascii=False
-        )
+        "background_investigation_results": background_investigation_results
     }
 
 
@@ -179,57 +123,34 @@ def planner_node(
         return Command(goto="reporter")
 
     full_response = ""
-    curr_plan = None
-
-    try:
-        if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
-            response = llm.invoke(messages)
-            # Check if response is a Plan object or something else
-            if hasattr(response, 'model_dump'):
-                # It's a Pydantic model
-                full_response = response.model_dump_json(indent=4, exclude_none=True)
-                curr_plan = response.model_dump()
-            else:
-                # It's not a Plan object, treat as raw response
-                logger.warning(f"Unexpected response type from structured output: {type(response)}")
-                full_response = str(response)
-                # Try to create a fallback plan
-                curr_plan = create_fallback_plan(state, full_response)
-        else:
-            response = llm.stream(messages)
-            for chunk in response:
-                full_response += chunk.content
-            try:
-                curr_plan = json.loads(repair_json_output(full_response))
-            except json.JSONDecodeError:
-                logger.warning("Planner response is not a valid JSON")
-                curr_plan = create_fallback_plan(state, full_response)
-    except Exception as e:
-        logger.error(f"Error processing planner response: {e}")
-        curr_plan = create_fallback_plan(state, full_response or "Error occurred")
-
+    if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
+        response = llm.invoke(messages)
+        full_response = response.model_dump_json(indent=4, exclude_none=True)
+    else:
+        response = llm.stream(messages)
+        for chunk in response:
+            full_response += chunk.content
     logger.debug(f"Current state messages: {state['messages']}")
     logger.info(f"Planner response: {full_response}")
 
-    # Validate curr_plan
-    if not curr_plan or not isinstance(curr_plan, dict):
-        logger.warning("Invalid plan format, using fallback")
-        curr_plan = create_fallback_plan(state, full_response)
-
+    try:
+        curr_plan = json.loads(repair_json_output(full_response))
+    except json.JSONDecodeError:
+        logger.warning("Planner response is not a valid JSON")
+        if plan_iterations > 0:
+            return Command(goto="reporter")
+        else:
+            return Command(goto="__end__")
     if curr_plan.get("has_enough_context"):
         logger.info("Planner response has enough context.")
-        try:
-            new_plan = Plan.model_validate(curr_plan)
-            return Command(
-                update={
-                    "messages": [AIMessage(content=full_response, name="planner")],
-                    "current_plan": new_plan,
-                },
-                goto="reporter",
-            )
-        except Exception as e:
-            logger.error(f"Failed to validate plan with enough context: {e}")
-            # Fall through to human feedback
+        new_plan = Plan.model_validate(curr_plan)
+        return Command(
+            update={
+                "messages": [AIMessage(content=full_response, name="planner")],
+                "current_plan": new_plan,
+            },
+            goto="reporter",
+        )
     return Command(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
@@ -272,6 +193,12 @@ def human_feedback_node(
         plan_iterations += 1
         # parse the plan
         new_plan = json.loads(current_plan)
+
+        # HACK: Add default step_type to each step if it's missing
+        for step in new_plan.get("steps", []):
+            if "step_type" not in step:
+                step["step_type"] = "research"
+
         if new_plan["has_enough_context"]:
             goto = "reporter"
     except json.JSONDecodeError:
@@ -281,21 +208,11 @@ def human_feedback_node(
         else:
             return Command(goto="__end__")
 
-    # Validate and create Plan object
-    try:
-        if isinstance(new_plan, dict):
-            validated_plan = Plan.model_validate(new_plan)
-        else:
-            validated_plan = new_plan  # Already a Plan object
-    except Exception as e:
-        logger.error(f"Failed to validate plan: {e}")
-        return Command(goto="__end__")
-
     return Command(
         update={
-            "current_plan": validated_plan,
+            "current_plan": Plan.model_validate(new_plan),
             "plan_iterations": plan_iterations,
-            "locale": new_plan.get("locale", "en-US") if isinstance(new_plan, dict) else validated_plan.locale,
+            "locale": new_plan["locale"],
         },
         goto=goto,
     )
@@ -303,83 +220,34 @@ def human_feedback_node(
 
 def coordinator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "background_investigator", "data_analyst", "__end__"]]:
+) -> Command[Literal["planner", "data_analyst", "background_investigator", "__end__"]]:
     """Coordinator node that communicate with customers."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
+    messages = apply_prompt_template("coordinator", state)
+    response = (
+        get_llm_by_type(AGENT_LLM_MAP["coordinator"])
+        .bind_tools([handoff_to_planner, handoff_to_data_analyst])
+        .invoke(messages)
+    )
+    logger.debug(f"Current state messages: {state['messages']}")
 
-    # 获取用户设置
-    user_settings = configurable.user_settings or {}
-    enable_background_investigation = user_settings.get("enableBackgroundInvestigation", False)
-
-    # 获取最新的用户消息
-    messages = state.get("messages", [])
-    user_messages = [msg for msg in messages if hasattr(msg, 'type') and msg.type == "human"]
-    latest_user_message = user_messages[-1].content if user_messages else ""
-
-    logger.info(f"研究模式状态: {enable_background_investigation}")
-    logger.info(f"用户消息: {latest_user_message}")
-
-    # 快速路由逻辑 - 减少 LLM 调用
     goto = "__end__"
-    locale = state.get("locale", "en-US")
+    locale = state.get("locale", "en-US")  # Default locale if not specified
     research_topic = state.get("research_topic", "")
-    data_analysis_task = ""
 
-    # 检查是否是简单的问候或闲聊
-    greeting_keywords = ["hello", "hi", "你好", "嗨", "how are you", "你好吗", "good morning", "早上好", "good afternoon", "下午好", "good evening", "晚上好"]
-    is_greeting = any(keyword.lower() in latest_user_message.lower() for keyword in greeting_keywords)
+    if len(response.tool_calls) > 0:
+        goto = "planner"  # default
+        data_query = ""
 
-    # 检查是否是数据分析/图表请求
-    chart_keywords = ["图表", "chart", "graph", "visualization", "可视化", "数据分析", "data analysis", "柱状图", "折线图", "饼图", "bar chart", "line chart", "pie chart"]
-    is_chart_request = any(keyword.lower() in latest_user_message.lower() for keyword in chart_keywords)
-
-    if is_greeting:
-        # 简单问候，直接回复
-        logger.info("检测到问候消息，直接回复")
-        messages = apply_prompt_template("coordinator", state)
-        response = get_llm_by_type(AGENT_LLM_MAP["coordinator"]).invoke(messages)
-    elif is_chart_request:
-        # 数据分析请求，直接路由到数据分析师
-        logger.info("检测到图表/数据分析请求，直接路由到数据分析师")
-        goto = "data_analyst"
-        data_analysis_task = latest_user_message
-        research_topic = data_analysis_task
-        response = type('Response', (), {
-            'content': f"我将为您处理这个数据分析请求：{latest_user_message}",
-            'tool_calls': []
-        })()
-    elif enable_background_investigation:
-        # 研究模式开启，直接路由到规划师
-        logger.info("研究模式开启，直接路由到规划师")
-        goto = "planner"
-        research_topic = latest_user_message
-        response = type('Response', (), {
-            'content': f"我将为您研究这个问题：{latest_user_message}",
-            'tool_calls': []
-        })()
-    else:
-        # 非研究模式，使用 LLM 判断
-        logger.info("使用 LLM 进行智能路由判断")
-        messages = apply_prompt_template("coordinator", state)
-        response = (
-            get_llm_by_type(AGENT_LLM_MAP["coordinator"])
-            .bind_tools([handoff_to_planner, handoff_to_data_analyst])
-            .invoke(messages)
-        )
-
-    # 处理工具调用（仅在使用 LLM 判断时需要）
-    if hasattr(response, 'tool_calls') and len(response.tool_calls) > 0:
         try:
             for tool_call in response.tool_calls:
                 tool_name = tool_call.get("name", "")
 
                 if tool_name == "handoff_to_planner":
                     goto = "planner"
-                    # 根据研究模式设置决定是否使用背景调查
-                    if enable_background_investigation:
+                    if state.get("enable_background_investigation"):
                         goto = "background_investigator"
-
                     if tool_call.get("args", {}).get("locale") and tool_call.get("args", {}).get("research_topic"):
                         locale = tool_call.get("args", {}).get("locale")
                         research_topic = tool_call.get("args", {}).get("research_topic")
@@ -387,34 +255,32 @@ def coordinator_node(
 
                 elif tool_name == "handoff_to_data_analyst":
                     goto = "data_analyst"
-
-                    if tool_call.get("args", {}).get("locale") and tool_call.get("args", {}).get("data_analysis_task"):
+                    if tool_call.get("args", {}).get("locale") and tool_call.get("args", {}).get("data_query"):
                         locale = tool_call.get("args", {}).get("locale")
-                        data_analysis_task = tool_call.get("args", {}).get("data_analysis_task")
-                        research_topic = data_analysis_task  # Use data_analysis_task as research_topic for consistency
+                        data_query = tool_call.get("args", {}).get("data_query")
                     break
 
         except Exception as e:
             logger.error(f"Error processing tool calls: {e}")
-    elif goto == "__end__" and not is_greeting:
-        # 只有在没有明确路由且不是问候时才警告
+    else:
         logger.warning(
             "Coordinator response contains no tool calls. Terminating workflow execution."
         )
         logger.debug(f"Coordinator response: {response}")
 
-    logger.info(f"Coordinator 路由决定: {goto}")
-    if goto != "__end__":
-        logger.info(f"研究主题: {research_topic}")
-        if data_analysis_task:
-            logger.info(f"数据分析任务: {data_analysis_task}")
+    update_dict = {
+        "locale": locale,
+        "resources": configurable.resources,
+    }
+
+    # 根据goto目标添加相应的参数
+    if goto == "data_analyst":
+        update_dict["data_query"] = data_query
+    else:
+        update_dict["research_topic"] = research_topic
 
     return Command(
-        update={
-            "locale": locale,
-            "research_topic": research_topic,
-            "resources": configurable.resources,
-        },
+        update=update_dict,
         goto=goto,
     )
 
@@ -620,18 +486,32 @@ async def _setup_and_execute_agent_step(
     # Create and execute agent with MCP tools if available
     if mcp_servers:
         async with MultiServerMCPClient(mcp_servers) as client:
-            loaded_tools = default_tools[:]
+            # 获取MCP工具
+            mcp_tools = []
             for tool in client.get_tools():
                 if tool.name in enabled_tools:
                     tool.description = (
                         f"Powered by '{enabled_tools[tool.name]}'.\n{tool.description}"
                     )
-                    loaded_tools.append(tool)
-            agent = create_agent(agent_type, agent_type, loaded_tools, agent_type)
+                    mcp_tools.append(tool)
+
+            # 使用MCP工具和默认工具创建智能体
+            all_additional_tools = default_tools + mcp_tools
+            agent = create_agent(
+                agent_name=agent_type,
+                agent_type=agent_type,
+                tools=all_additional_tools,
+                prompt_template=agent_type
+            )
             return await _execute_agent_step(state, agent, agent_type)
     else:
-        # Use default tools if no MCP servers are configured
-        agent = create_agent(agent_type, agent_type, default_tools, agent_type)
+        # 使用默认工具创建智能体
+        agent = create_agent(
+            agent_name=agent_type,
+            agent_type=agent_type,
+            tools=default_tools,
+            prompt_template=agent_type
+        )
         return await _execute_agent_step(state, agent, agent_type)
 
 
@@ -640,18 +520,9 @@ async def researcher_node(
 ) -> Command[Literal["research_team"]]:
     """Researcher node that do research"""
     logger.info("Researcher node is researching.")
-    configurable = Configuration.from_runnable_config(config)
 
-    # 基础搜索和爬虫工具
-    tools = [get_web_search_tool(configurable.max_search_results), crawl_tool]
-
-    # 检索工具（条件性添加）
-    retriever_tool = get_retriever_tool(state.get("resources", []))
-    if retriever_tool:
-        tools.insert(0, retriever_tool)
-
-    # 新增的查询工具 - 为Researcher提供更强的数据查询能力
-    query_tools = [
+    # 使用数据库查询和API调用工具替代网络搜索
+    additional_tools = [
         # API工具
         execute_api,
         list_available_apis,
@@ -664,18 +535,20 @@ async def researcher_node(
         # 数据库工具
         database_query,
         list_databases,
+        search_databases,
+        find_database_by_name,
+        get_database_info,
         test_database_connection,
         # 图表生成工具
         generate_chart,
     ]
-    tools.extend(query_tools)
+    logger.info(f"Researcher additional tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in additional_tools]}")
 
-    logger.info(f"Researcher tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
     return await _setup_and_execute_agent_step(
         state,
         config,
         "researcher",
-        tools,
+        additional_tools,  # 这些将作为额外工具添加到默认工具中
     )
 
 
@@ -684,83 +557,103 @@ async def coder_node(
 ) -> Command[Literal["research_team"]]:
     """Coder node that do code analysis."""
     logger.info("Coder node is coding.")
+
+    # 使用自动工具配置，但保留传统的Python REPL工具作为额外工具
+    additional_tools = [python_repl_tool]
+    logger.info(f"Coder additional tools: {additional_tools}")
+
     return await _setup_and_execute_agent_step(
         state,
         config,
         "coder",
-        [python_repl_tool],
+        additional_tools,  # 这些将作为额外工具添加到默认工具中
     )
 
 
-async def data_analyst_node(state: State, config: RunnableConfig):
-    """Data analyst node that performs data analysis and chart generation."""
-    logger.info("Data analyst node is analyzing data.")
-    configurable = Configuration.from_runnable_config(config)
+async def data_analyst_node(state: State, config: RunnableConfig) -> Command[Literal["__end__"]]:
+    """Data analyst node that provides comprehensive data analysis and Q&A."""
+    logger.info("Data analyst is analyzing.")
 
-    # 获取用户消息
-    user_message = state.get("messages", [])[-1].content if state.get("messages") else ""
+    # 获取用户查询 - 从data_query或messages中获取
+    data_query = state.get("data_query")
+    if not data_query:
+        messages = state.get("messages", [])
+        if messages:
+            data_query = messages[-1].content if hasattr(messages[-1], 'content') else str(messages[-1])
+        else:
+            return Command(goto="__end__")
 
-    # 基础搜索和爬虫工具
-    tools = [get_web_search_tool(configurable.max_search_results), crawl_tool]
+    # LangSmith追踪支持
+    from src.config.langsmith import create_langsmith_run_name, add_langsmith_metadata, is_langsmith_enabled
 
-    # 检索工具（条件性添加）
-    retriever_tool = get_retriever_tool(state.get("resources", []))
-    if retriever_tool:
-        tools.insert(0, retriever_tool)
+    if is_langsmith_enabled():
+        logger.info(f"🔍 LangSmith追踪已启用，正在记录数据分析师执行过程")
+        run_name = create_langsmith_run_name("data_analyst", data_query)
+        logger.debug(f"LangSmith运行名称: {run_name}")
 
-    # 数据查询和分析工具
-    query_tools = [
+    # 使用所有数据分析工具
+    data_tools = [
+        # 资源发现工具
+        discover_resources,
         # API工具
         execute_api,
         list_available_apis,
         get_api_details,
         # Text2SQL工具
         text2sql_query,
+        smart_text2sql_query,  # 新增：支持自动图表生成的智能查询工具
         generate_sql_only,
+        get_training_examples,
         validate_sql,
         # 数据库工具
         database_query,
         list_databases,
+        search_databases,
+        find_database_by_name,
+        get_database_info,
         test_database_connection,
         # 图表生成工具
         generate_chart,
     ]
-    tools.extend(query_tools)
 
-    # 创建数据分析师智能体
-    agent = create_agent_async("data_analyst", "data_analyst", tools, "data_analyst")
-
-    # 准备输入
-    agent_input = {
-        "messages": [
-            HumanMessage(
-                content=f"# Data Analysis Task\n\n{user_message}\n\nLocale: {state.get('locale', 'en-US')}"
-            )
-        ]
-    }
-
-    # 执行数据分析
-    default_recursion_limit = 25
-    try:
-        env_value_str = os.getenv("AGENT_RECURSION_LIMIT", str(default_recursion_limit))
-        parsed_limit = int(env_value_str)
-        if parsed_limit > 0:
-            recursion_limit = parsed_limit
-        else:
-            recursion_limit = default_recursion_limit
-    except ValueError:
-        recursion_limit = default_recursion_limit
-
-    logger.info(f"Data analyst input: {agent_input}")
-    result = await agent.ainvoke(
-        input=agent_input, config={"recursion_limit": recursion_limit}
+    # 创建数据分析师智能体 - 这是一个完整的ReAct智能体，使用异步版本
+    from src.agents import create_agent_async
+    agent = create_agent_async(
+        agent_name="data_analyst",
+        agent_type="data_analyst",
+        tools=data_tools,
+        prompt_template="data_analyst"
     )
 
-    # 处理结果
-    response_content = result["messages"][-1].content
-    logger.info(f"Data analyst response: {response_content}")
-
-    return {
-        "final_report": response_content,
-        "messages": [AIMessage(content=response_content, name="data_analyst")]
+    # 准备智能体输入，包含用户查询和当前状态信息
+    agent_input = {
+        "messages": [
+            HumanMessage(content=f"用户请求: {data_query}")
+        ],
+        "locale": state.get("locale", "zh-CN")
     }
+
+    logger.info(f"Data analyst processing query: {data_query}")
+
+    # 执行分析 - 智能体会自动进行工具调用和推理循环
+    result = await agent.ainvoke(
+        input=agent_input,
+        config={"recursion_limit": 50}  # 增加递归限制以支持多轮工具调用
+    )
+
+    # 获取最终响应 - 这是智能体经过工具调用和推理后的最终答案
+    final_message = result["messages"][-1]
+    response_content = final_message.content
+
+    logger.info(f"Data analyst completed analysis")
+    logger.debug(f"Data analyst final response: {response_content}")
+
+    return Command(
+        update={
+            "messages": [
+                AIMessage(content=response_content, name="data_analyst")
+            ],
+            "final_report": response_content,
+        },
+        goto="__end__",
+    )

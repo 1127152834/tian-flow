@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Vanna AI service manager for DeerFlow
+Vanna AI service manager for Olight
 """
 
 import logging
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class VannaServiceManager:
-    """Vanna AI service manager for DeerFlow"""
+    """Vanna AI service manager for Olight"""
     
     def __init__(self):
         self._vanna_instances: Dict[str, VannaBase] = {}

@@ -204,58 +204,95 @@ class ResourceDiscoveryService:
             return []
 
     async def _discover_text2sql_resources_with_tools(self) -> List[Dict[str, Any]]:
-        """使用真实工具发现Text2SQL资源"""
+        """直接从 vanna_embeddings 表发现每条记录作为独立资源"""
         resources = []
 
         try:
-            # 使用 get_training_examples 工具获取训练示例
-            result = get_training_examples.invoke({'limit': 100})
-            result_data = json.loads(result)
+            # 直接查询 vanna_embeddings 表，为每条记录创建一个资源
+            from sqlalchemy import create_engine
+            from sqlalchemy.orm import sessionmaker
+            from src.config.database import DATABASE_URL
 
-            if result_data.get('success') and result_data.get('data'):
-                examples = result_data['data']['examples']
+            engine = create_engine(DATABASE_URL)
+            Session = sessionmaker(bind=engine)
+            session = Session()
 
-                # 按数据源分组
-                datasource_groups = {}
-                for example in examples:
-                    # 这里需要从example中提取datasource_id，如果没有则使用默认值
-                    datasource_id = 1  # 默认数据源ID
+            try:
+                # 查询 vanna_embeddings 表并关联数据源信息
+                query = text("""
+                    SELECT ve.id, ve.datasource_id, ve.content, ve.sql_query, ve.question, ve.table_name,
+                           ve.content_type, ve.database_name, ve.column_name, ve.created_at,
+                           ds.name as datasource_name, ds.description as datasource_description
+                    FROM text2sql.vanna_embeddings ve
+                    LEFT JOIN database_management.database_datasources ds ON ve.datasource_id = ds.id
+                    ORDER BY ve.datasource_id, ve.id
+                """)
 
-                    if datasource_id not in datasource_groups:
-                        datasource_groups[datasource_id] = []
-                    datasource_groups[datasource_id].append(example)
+                result = session.execute(query)
+                records = result.fetchall()
 
-                for datasource_id, group_examples in datasource_groups.items():
+                logger.info(f"从 vanna_embeddings 表查询到 {len(records)} 条记录")
+
+                for record in records:
+                    # 构建数据库信息显示
+                    datasource_name = record.datasource_name or f"未知数据源"
+                    datasource_display = f"数据库名称: {datasource_name}，id: {record.datasource_id}"
+
+                    # 构建资源描述
+                    content_type = record.content_type or "UNKNOWN"
+                    if content_type == "DDL":
+                        resource_name = f"DDL: {record.table_name or '表结构'}"
+                        description = f"数据库表结构 - {record.table_name} ({datasource_display})"
+                        capabilities = ["表结构查询", "字段信息", "DDL生成", "模式分析"]
+                    elif content_type == "SQL":
+                        resource_name = f"SQL: {record.question or 'SQL查询'}"
+                        description = f"SQL查询示例 - {record.question or 'SQL语句'} ({datasource_display})"
+                        capabilities = ["SQL示例", "查询模板", "语法参考", "最佳实践"]
+                    else:
+                        resource_name = f"文档: {record.table_name or '数据库文档'}"
+                        description = f"数据库文档 - {record.table_name or '说明文档'} ({datasource_display})"
+                        capabilities = ["文档查询", "说明信息", "使用指南"]
+
                     resource = {
-                        "resource_id": f"text2sql_{datasource_id}",
-                        "resource_name": f"Text2SQL训练数据 (数据源 {datasource_id})",
+                        "resource_id": f"vanna_embedding_{record.id}",
+                        "resource_name": resource_name,
                         "resource_type": ResourceType.TEXT2SQL,
-                        "description": f"Text2SQL训练示例和查询模板 (数据源 {datasource_id})",
-                        "capabilities": [
-                            "自然语言转SQL", "SQL生成", "查询示例",
-                            "语法参考", "最佳实践", "SQL验证"
-                        ],
+                        "description": description,
+                        "capabilities": capabilities,
                         "tags": [
-                            "text2sql", "vanna", "training_data",
-                            f"datasource_{datasource_id}", "sql_examples"
+                            content_type.lower(),
+                            f"datasource_{record.datasource_id}",
+                            record.table_name.lower() if record.table_name else "unknown_table"
                         ],
                         "metadata": {
-                            "datasource_id": datasource_id,
-                            "example_count": len(group_examples),
-                            "tool_methods": ["text2sql_query", "generate_sql_only", "get_training_examples"]
+                            "vanna_id": record.id,
+                            "datasource_id": record.datasource_id,
+                            "datasource_name": record.datasource_name,
+                            "datasource_description": record.datasource_description,
+                            "content_type": content_type,
+                            "table_name": record.table_name,
+                            "database_name": record.database_name,
+                            "column_name": record.column_name,
+                            "has_content": bool(record.content),
+                            "has_sql_query": bool(record.sql_query),
+                            "has_question": bool(record.question),
+                            "created_at": record.created_at.isoformat() if record.created_at else None
                         },
                         "source_table": "vanna_embeddings",
-                        "source_id": datasource_id,
+                        "source_id": record.id,
                         "is_active": True,
                         "status": ResourceStatus.ACTIVE
                     }
                     resources.append(resource)
 
-            logger.info(f"使用工具发现了 {len(resources)} 个Text2SQL资源")
+            finally:
+                session.close()
+
+            logger.info(f"发现了 {len(resources)} 个Text2SQL资源 (每条vanna_embeddings记录)")
             return resources
 
         except Exception as e:
-            logger.error(f"使用工具发现Text2SQL资源失败: {e}")
+            logger.error(f"发现Text2SQL资源失败: {e}")
             return []
 
     async def _discover_database_resources(self, session: Session) -> List[Dict[str, Any]]:
@@ -369,20 +406,32 @@ class ResourceDiscoveryService:
     async def _discover_system_tools(self) -> List[Dict[str, Any]]:
         """发现系统工具资源"""
         resources = []
-        
+
+        # 需要过滤的工具名称列表（避免套娃）
+        excluded_tools = {
+            'discover_resources',  # 资源发现工具不应该被发现
+            'get_available_tools', # 获取工具列表的工具也不应该被发现
+            'get_resource_details' # 获取资源详情的工具也不应该被发现
+        }
+
         try:
             # 通过反射发现所有 @tool 装饰的函数
             tools = await self._scan_tool_functions()
-            
+
             for tool_func in tools:
                 function_name = tool_func.__name__
                 module_name = tool_func.__module__
-                
+
+                # 过滤掉资源发现相关的工具，避免套娃
+                if function_name in excluded_tools:
+                    logger.info(f"跳过资源发现相关工具: {function_name} (避免套娃)")
+                    continue
+
                 # 提取工具描述
                 description = tool_func.__doc__ or f"系统工具: {function_name}"
                 if description:
                     description = description.strip().split('\n')[0]  # 取第一行作为描述
-                
+
                 resource = {
                     "resource_id": f"tool_{function_name}",
                     "resource_name": function_name,
@@ -532,6 +581,64 @@ class ResourceDiscoveryService:
             capabilities.extend(["分析", "处理"])
         
         return list(set(capabilities))  # 去重
+
+    async def detect_resource_changes(self, session: Session, preview_only: bool = True) -> Dict[str, Any]:
+        """检测资源变更"""
+        try:
+            logger.info(f"🔍 开始检测资源变更 (预览模式: {preview_only})")
+
+            # 发现当前系统中的所有资源
+            current_resources = await self.discover_all_resources(session)
+
+            # 获取已注册的资源
+            from sqlalchemy import text
+            registered_query = text("""
+                SELECT resource_id, resource_name, resource_type, source_table, source_id,
+                       is_active, status, created_at, updated_at
+                FROM resource_discovery.resource_registry
+                ORDER BY resource_id
+            """)
+
+            result = session.execute(registered_query)
+            registered_resources = {row.resource_id: dict(row._mapping) for row in result.fetchall()}
+
+            # 比较资源变更
+            current_resource_ids = {r["resource_id"] for r in current_resources}
+            registered_resource_ids = set(registered_resources.keys())
+
+            # 新增的资源
+            added_ids = current_resource_ids - registered_resource_ids
+            added_resources = [r for r in current_resources if r["resource_id"] in added_ids]
+
+            # 删除的资源
+            deleted_ids = registered_resource_ids - current_resource_ids
+            deleted_resources = [registered_resources[rid] for rid in deleted_ids]
+
+            # 修改的资源 (简化检测：只检查名称和描述)
+            modified_resources = []
+            for resource in current_resources:
+                rid = resource["resource_id"]
+                if rid in registered_resources:
+                    registered = registered_resources[rid]
+                    if (resource.get("resource_name") != registered.get("resource_name") or
+                        resource.get("description") != registered.get("description")):
+                        modified_resources.append({
+                            "current": resource,
+                            "registered": registered
+                        })
+
+            changes = {
+                "added": added_resources,
+                "modified": modified_resources,
+                "deleted": deleted_resources
+            }
+
+            logger.info(f"✅ 变更检测完成: 新增{len(added_resources)}, 修改{len(modified_resources)}, 删除{len(deleted_resources)}")
+            return changes
+
+        except Exception as e:
+            logger.error(f"❌ 检测资源变更失败: {e}")
+            raise
 
     def get_available_tools(self) -> Dict[str, Any]:
         """获取所有可用的工具"""

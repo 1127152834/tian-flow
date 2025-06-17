@@ -5,6 +5,7 @@ import { MagicWandIcon } from "@radix-ui/react-icons";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp, Lightbulb, X } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
+
 import { useLanguage } from '~/contexts/language-context';
 
 import { Detective } from "~/components/deer-flow/icons/detective";

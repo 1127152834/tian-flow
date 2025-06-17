@@ -28,13 +28,13 @@ export default function Main() {
         className={cn(
           "shrink-0 transition-all duration-300 ease-out",
           !doubleColumnMode &&
-            `w-[768px] translate-x-[min(max(calc((100vw-538px)*0.75),575px)/2,960px/2)]`,
-          doubleColumnMode && `w-[538px]`,
+            `w-[min(1200px,90vw)] mx-auto`,
+          doubleColumnMode && `w-[min(800px,45vw)]`,
         )}
       />
       <ResearchBlock
         className={cn(
-          "w-[min(max(calc((100vw-538px)*0.75),575px),960px)] pb-4 transition-all duration-300 ease-out",
+          "w-[min(1000px,45vw)] pb-4 transition-all duration-300 ease-out",
           !doubleColumnMode && "scale-0",
           doubleColumnMode && "",
         )}

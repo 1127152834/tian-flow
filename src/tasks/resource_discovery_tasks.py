@@ -362,6 +362,170 @@ def sync_resources_task(self, force_full_sync: bool = False):
         raise Exception(error_msg)
 
 
+@celery_app.task(bind=True, name='incremental_sync_task')
+def incremental_sync_task(self, force_full_sync: bool = False):
+    """增量同步任务"""
+    logger.info(f"🔄 Starting incremental sync task: force_full={force_full_sync}")
+
+    try:
+        # 获取数据库会话
+        session = next(get_db_session())
+
+        try:
+            # 创建同步器
+            from src.services.resource_discovery.resource_synchronizer import ResourceSynchronizer
+            synchronizer = ResourceSynchronizer()
+
+            # 发送WebSocket进度通知
+            def sync_send_websocket_progress(progress, message, current_step, total_steps, processed_items, total_items):
+                """同步发送WebSocket进度通知"""
+                async def send_progress():
+                    try:
+                        from src.services.websocket.progress_manager import progress_ws_manager
+                        await progress_ws_manager.send_task_progress(
+                            task_id=self.request.id,
+                            progress=progress,
+                            message=message,
+                            current_step=current_step,
+                            total_steps=total_steps,
+                            processed_items=processed_items,
+                            total_items=total_items
+                        )
+                    except Exception as e:
+                        logger.warning(f"WebSocket进度通知发送失败: {e}")
+
+                # 同步方式发送进度通知
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(send_progress())
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    logger.warning(f"同步WebSocket进度通知发送失败: {e}")
+
+            # 步骤1: 检测变更
+            sync_send_websocket_progress(25, '检测资源变更...', '检测变更', 4, 1, 4)
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'message': '检测资源变更...',
+                    'progress': 25,
+                    'current_step': '检测变更',
+                    'total_steps': 4,
+                    'processed_items': 1,
+                    'total_items': 4
+                }
+            )
+
+            # 步骤2: 执行同步
+            sync_send_websocket_progress(50, '执行增量同步...', '同步资源', 4, 2, 4)
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'message': '执行增量同步...',
+                    'progress': 50,
+                    'current_step': '同步资源',
+                    'total_steps': 4,
+                    'processed_items': 2,
+                    'total_items': 4
+                }
+            )
+
+            # 执行增量同步
+            logger.info("🔄 开始执行增量同步...")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                # 添加中间进度更新
+                sync_send_websocket_progress(60, '正在处理资源变更...', '处理变更', 4, 2, 4)
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'message': '正在处理资源变更...',
+                        'progress': 60,
+                        'current_step': '处理变更',
+                        'total_steps': 4,
+                        'processed_items': 2,
+                        'total_items': 4
+                    }
+                )
+
+                result = loop.run_until_complete(
+                    synchronizer.sync_and_vectorize_incremental(
+                        session=session,
+                        force_full_sync=force_full_sync
+                    )
+                )
+
+                logger.info(f"✅ 增量同步执行完成: {result}")
+
+                # 步骤3: 向量化
+                sync_send_websocket_progress(80, '完成资源同步...', '向量化', 4, 3, 4)
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'message': '完成资源同步...',
+                        'progress': 80,
+                        'current_step': '向量化',
+                        'total_steps': 4,
+                        'processed_items': 3,
+                        'total_items': 4
+                    }
+                )
+
+            except Exception as sync_error:
+                logger.error(f"❌ 增量同步执行失败: {sync_error}")
+                sync_send_websocket_progress(50, f'同步失败: {str(sync_error)}', '错误', 4, 2, 4)
+                raise sync_error
+            finally:
+                loop.close()
+
+            # 步骤4: 完成
+            sync_send_websocket_progress(100, '增量同步完成', '完成', 4, 4, 4)
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'message': '增量同步完成',
+                    'progress': 100,
+                    'current_step': '完成',
+                    'total_steps': 4,
+                    'processed_items': 4,
+                    'total_items': 4
+                }
+            )
+
+            logger.info(f"✅ Incremental sync completed: {result}")
+
+            return {
+                'success': True,
+                'message': '增量同步完成',
+                'result': result,
+                'task_id': self.request.id
+            }
+
+        finally:
+            session.close()
+
+    except Exception as e:
+        error_msg = f"Incremental sync failed: {str(e)}"
+        logger.error(error_msg)
+
+        # 更新任务状态为失败
+        self.update_state(
+            state='FAILURE',
+            meta={
+                'message': error_msg,
+                'progress': 0,
+                'error': str(e)
+            }
+        )
+
+        raise Exception(error_msg)
+
+
 # Task signal handlers
 @task_prerun.connect
 def task_prerun_handler(task_id=None, task=None, **_kwargs):

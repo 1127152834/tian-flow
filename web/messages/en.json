@@ -51,7 +51,7 @@
   "landing": {
     "hero": {
       "title": "Deep Research at Your Fingertips",
-      "subtitle": "Meet Olight, your personal Deep Research assistant. With powerful tools like search engines, web crawlers, Python and MCP services, it delivers instant insights, comprehensive reports, and even captivating podcasts.",
+      "subtitle": "Meet Olight, your personal Deep Research assistant. With powerful tools like search engines, data crawlers, Python and MCP services, it delivers instant insights, comprehensive reports, and even captivating podcasts.",
       "getStarted": "Get Started",
       "learnMore": "Learn More",
 
@@ -59,7 +59,7 @@
     },
     "coreFeatures": {
       "title": "Core Features",
-      "description": "Find out what makes DeerFlow effective.",
+      "description": "Find out what makes Olight effective.",
       "features": {
         "deeperResearch": {
           "name": "Dive Deeper and Reach Wider",
@@ -86,7 +86,7 @@
     },
     "caseStudies": {
       "title": "Case Studies",
-      "description": "See DeerFlow in action through replays.",
+      "description": "See Olight in action through replays.",
       "clickToWatch": "Click to watch replay"
     },
     "footer": {
@@ -107,8 +107,8 @@
       "enhancePrompt": "Enhance prompt with AI",
       "deepThinking": "Deep Thinking",
       "investigation": "Investigation",
-      "deepThinkingTooltip": "When enabled, DeerFlow will use reasoning model ({model}) to generate more thoughtful plans.",
-      "investigationTooltip": "When enabled, DeerFlow will perform a quick search before planning. This is useful for researches related to ongoing events and news.",
+      "deepThinkingTooltip": "When enabled, Olight will use reasoning model ({model}) to generate more thoughtful plans.",
+      "investigationTooltip": "When enabled, Olight will perform a quick search before planning. This is useful for researches related to ongoing events and news.",
       "deepThinkingMode": "Deep Thinking Mode: {status}",
       "investigationMode": "Investigation Mode: {status}",
       "on": "On",
@@ -119,17 +119,21 @@
       "description": "Select the writing style for your research reports. Each style is optimized for different audiences and purposes.",
       "currentStyle": "Writing Style: {style}",
       "tooltip": "Choose the writing style for your research reports. Different styles are optimized for different audiences and purposes.",
-      "academic": {
-        "label": "Academic",
-        "description": "Formal, objective, and analytical with precise terminology"
+      "technicalReport": {
+        "label": "Technical Report",
+        "description": "Data-driven, chart-rich, precise technical terminology"
       },
-      "popularScience": {
-        "label": "Popular Science",
-        "description": "Engaging and accessible for general audience"
+      "operationManual": {
+        "label": "Operation Manual",
+        "description": "Clear steps, illustrated, easy to execute"
       },
-      "news": {
-        "label": "News",
-        "description": "Factual, concise, and impartial journalistic style"
+      "qualityDocumentation": {
+        "label": "Quality Documentation",
+        "description": "Strictly regulated, traceable, standard-compliant"
+      },
+      "businessReport": {
+        "label": "Business Report",
+        "description": "Data visualization, decision-oriented, executive-friendly"
       },
       "socialMedia": {
         "label": "Social Media",
@@ -140,8 +144,8 @@
   "settings": {
     "title": "Settings",
     "dialog": {
-      "title": "DeerFlow Settings",
-      "description": "Manage your DeerFlow settings here.",
+      "title": "Olight Settings",
+      "description": "Manage your Olight settings here.",
       "cancel": "Cancel",
       "save": "Save"
     },
@@ -275,7 +279,7 @@
     },
     "mcp": {
       "title": "MCP Servers",
-      "description": "The Model Context Protocol boosts DeerFlow by integrating external tools for tasks like private domain searches, web browsing, food ordering, and more. Click here to",
+      "description": "The Model Context Protocol boosts Olight by integrating external tools for tasks like private domain searches, web browsing, food ordering, and more. Click here to",
       "learnMore": "learn more about MCP.",
       "actions": {
         "enableDisable": "Enable/disable server",

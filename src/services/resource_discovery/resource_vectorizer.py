@@ -6,7 +6,8 @@
 
 import logging
 import asyncio
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -382,41 +383,191 @@ class ResourceVectorizer:
         return " | ".join(parts)
     
     def _build_ddl_composite_text(self, resource: Dict[str, Any], metadata: Dict[str, Any]) -> str:
-        """构建 DDL 类型的复合文本"""
+        """构建 DDL 类型的复合文本 - 专注于表结构和字段信息"""
         parts = []
-        
-        parts.append(f"数据库表结构信息")
-        parts.append(f"数据源ID: {metadata.get('datasource_id', '')}")
-        parts.append(f"内容类型: 表结构定义")
-        
-        description = resource.get("description", "")
-        if description:
-            parts.append(description)
-        
-        capabilities = resource.get("capabilities", [])
-        if capabilities:
-            parts.append(f"支持功能: {', '.join(capabilities)}")
-        
-        return " | ".join(parts)
+
+        # 获取表名和数据库信息
+        table_name = metadata.get('table_name', '')
+        database_name = metadata.get('database_name', '')
+        datasource_id = metadata.get('datasource_id', '')
+
+        # 构建用户友好的描述
+        if table_name:
+            if database_name:
+                parts.append(f"{database_name}数据库中的{table_name}表")
+            else:
+                parts.append(f"{table_name}表结构")
+        else:
+            parts.append("数据库表结构")
+
+        # 添加数据源信息
+        if datasource_id:
+            parts.append(f"数据源{datasource_id}")
+
+        # 尝试从原始内容中提取字段信息
+        original_content = self._get_original_content(resource, metadata)
+        if original_content:
+            field_info = self._extract_table_fields_description(original_content)
+            if field_info:
+                parts.append(field_info)
+
+        return " ".join(parts)
     
     def _build_sql_composite_text(self, resource: Dict[str, Any], metadata: Dict[str, Any]) -> str:
-        """构建 SQL 类型的复合文本"""
+        """构建 SQL 类型的复合文本 - 专注于业务问题和查询意图"""
         parts = []
-        
-        parts.append(f"SQL查询示例")
-        parts.append(f"数据源ID: {metadata.get('datasource_id', '')}")
-        parts.append(f"内容类型: SQL查询模板")
-        
-        description = resource.get("description", "")
-        if description:
-            parts.append(description)
-        
-        capabilities = resource.get("capabilities", [])
-        if capabilities:
-            parts.append(f"支持功能: {', '.join(capabilities)}")
-        
-        return " | ".join(parts)
-    
+
+        # 获取问题和数据库信息
+        datasource_id = metadata.get('datasource_id', '')
+        database_name = metadata.get('database_name', '')
+
+        # 尝试从原始内容中提取问题和SQL信息
+        original_content = self._get_original_content(resource, metadata)
+        question_text = self._extract_question_from_content(original_content)
+        sql_summary = self._extract_sql_summary(original_content)
+
+        # 构建用户友好的描述
+        if question_text:
+            parts.append(question_text)
+        else:
+            parts.append("SQL查询示例")
+
+        # 添加数据库上下文
+        if database_name:
+            parts.append(f"查询{database_name}数据库")
+        elif datasource_id:
+            parts.append(f"查询数据源{datasource_id}")
+
+        # 添加SQL操作摘要
+        if sql_summary:
+            parts.append(sql_summary)
+
+        return " ".join(parts)
+
+    def _get_original_content(self, resource: Dict[str, Any], metadata: Dict[str, Any]) -> str:
+        """获取原始内容数据"""
+        try:
+            # 从数据库查询原始的 vanna_embeddings 记录
+            vanna_id = metadata.get('vanna_id')
+            if not vanna_id:
+                return ""
+
+            from sqlalchemy import create_engine, text
+            from src.config.database import DATABASE_URL
+
+            engine = create_engine(DATABASE_URL)
+            with engine.connect() as conn:
+                query = text("""
+                    SELECT content, sql_query, question
+                    FROM text2sql.vanna_embeddings
+                    WHERE id = :vanna_id
+                """)
+                result = conn.execute(query, {"vanna_id": vanna_id})
+                row = result.fetchone()
+
+                if row:
+                    return {
+                        'content': row.content or '',
+                        'sql_query': row.sql_query or '',
+                        'question': row.question or ''
+                    }
+
+            return ""
+        except Exception as e:
+            logger.warning(f"获取原始内容失败: {e}")
+            return ""
+
+    def _extract_table_fields_description(self, content_data) -> str:
+        """从DDL内容中提取表字段描述"""
+        if not content_data or not isinstance(content_data, dict):
+            return ""
+
+        content = content_data.get('content', '')
+        if not content:
+            return ""
+
+        try:
+            # 匹配字段定义行
+            field_pattern = r'(\w+)\s+(\w+(?:\([^)]+\))?)\s*(?:NOT NULL|NULL)?\s*(?:DEFAULT[^,\n]*)?(?:COMMENT\s+[\'"]([^\'"]*)[\'"])?'
+            matches = re.findall(field_pattern, content, re.IGNORECASE)
+
+            if matches:
+                field_descriptions = []
+                for match in matches[:5]:  # 只取前5个字段避免内容过长
+                    field_name = match[0]
+                    # field_type = match[1]  # 暂时不使用类型信息
+                    comment = match[2] if len(match) > 2 and match[2] else ""
+
+                    if comment:
+                        field_descriptions.append(f"{field_name}({comment})")
+                    else:
+                        field_descriptions.append(f"{field_name}字段")
+
+                if field_descriptions:
+                    return f"包含{', '.join(field_descriptions)}"
+
+            # 如果正则匹配失败，尝试简单的关键词提取
+            words = content.lower().split()
+            table_keywords = ['id', 'name', 'code', 'time', 'date', 'status', 'type', 'user', 'data']
+            found_keywords = [word for word in table_keywords if word in words]
+
+            if found_keywords:
+                return f"包含{', '.join(found_keywords[:3])}等字段"
+
+        except Exception as e:
+            logger.warning(f"提取字段描述失败: {e}")
+
+        return ""
+
+    def _extract_question_from_content(self, content_data) -> str:
+        """从SQL内容中提取问题描述"""
+        if not content_data or not isinstance(content_data, dict):
+            return ""
+
+        question = content_data.get('question', '').strip()
+        if question:
+            # 清理问题文本，移除多余的标点和空格
+            question = re.sub(r'\s+', ' ', question)
+            # 限制长度
+            if len(question) > 100:
+                question = question[:100] + "..."
+            return question
+
+        return ""
+
+    def _extract_sql_summary(self, content_data) -> str:
+        """从SQL查询中提取操作摘要"""
+        if not content_data or not isinstance(content_data, dict):
+            return ""
+
+        sql_query = content_data.get('sql_query', '').strip().upper()
+        if not sql_query:
+            return ""
+
+        try:
+            # 识别SQL操作类型
+            if sql_query.startswith('SELECT'):
+                # 尝试提取表名
+                import re
+                table_match = re.search(r'FROM\s+(\w+)', sql_query, re.IGNORECASE)
+                if table_match:
+                    table_name = table_match.group(1)
+                    return f"查询{table_name}表数据"
+                else:
+                    return "数据查询操作"
+            elif sql_query.startswith('INSERT'):
+                return "数据插入操作"
+            elif sql_query.startswith('UPDATE'):
+                return "数据更新操作"
+            elif sql_query.startswith('DELETE'):
+                return "数据删除操作"
+            else:
+                return "数据库操作"
+        except Exception as e:
+            logger.warning(f"提取SQL摘要失败: {e}")
+
+        return ""
+
     async def _get_embedding(self, text: str) -> Optional[List[float]]:
         """获取文本的向量嵌入"""
         try:
@@ -502,7 +653,7 @@ class ResourceVectorizer:
             session.execute(update_query, {
                 "resource_id": resource_id,
                 "status": status.value,
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             })
             session.commit()
             

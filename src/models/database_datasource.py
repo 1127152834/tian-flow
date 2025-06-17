@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Database datasource models for DeerFlow.
+Database datasource models for Olight.
 
 Adapted from ti-flow but removed ChatEngine dependencies and user-related fields.
 Uses configuration-based resource management instead.

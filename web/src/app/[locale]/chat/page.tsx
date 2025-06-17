@@ -10,6 +10,7 @@ import { Suspense } from "react";
 import { Logo } from "~/components/deer-flow/logo";
 import { ThemeToggle } from "~/components/deer-flow/theme-toggle";
 import { SettingsDialog } from "../settings/dialogs/settings-dialog";
+import { WebSocketStatus } from "~/components/websocket-status";
 
 // 导入图表 WebSocket 监听器（会自动初始化）
 import "~/core/websocket/chart-listener";
@@ -28,7 +29,8 @@ export default function HomePage() {
     <div className="flex h-screen w-screen justify-center overscroll-none">
       <header className="fixed top-0 left-0 flex h-12 w-full items-center justify-between px-4">
         <Logo />
-        <div className="flex items-center">
+        <div className="flex items-center gap-1">
+          <WebSocketStatus />
           <ThemeToggle />
           <Suspense>
             <SettingsDialog />

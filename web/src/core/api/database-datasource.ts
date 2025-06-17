@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Database datasource API client for DeerFlow.
+ * Database datasource API client for Olight.
  * Provides functions to interact with database datasource management endpoints.
  */
 

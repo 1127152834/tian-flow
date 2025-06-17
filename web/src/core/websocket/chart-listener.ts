@@ -49,8 +49,10 @@ class GlobalWebSocketManager {
     this.isConnecting = true;
 
     try {
+      // 使用后端服务端口 8000，而不是前端端口 3000
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/api/ws/progress/global_listener`;
+      const backendHost = window.location.hostname + ':8000';
+      const wsUrl = `${protocol}//${backendHost}/api/ws/progress/global_listener`;
 
       this.websocket = new WebSocket(wsUrl);
 

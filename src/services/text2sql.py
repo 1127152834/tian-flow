@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Text2SQL service for DeerFlow.
+Text2SQL service for Olight.
 
 Provides natural language to SQL conversion with Celery background tasks,
 WebSocket real-time monitoring, and pgvector-based similarity search.

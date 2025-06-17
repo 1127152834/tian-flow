@@ -488,12 +488,7 @@ export function TrainingDataManager({ datasourceId, datasourceName }: TrainingDa
                               {getContentTypeIcon(item.content_type)}
                               {item.content_type}
                             </Badge>
-                            {item.is_validated && (
-                              <Badge variant="outline" className="text-green-600">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                已验证
-                              </Badge>
-                            )}
+                            {/* Validation badge removed since VannaEmbedding doesn't have is_validated field */}
                             <span className="text-xs text-muted-foreground">
                               {new Date(item.created_at).toLocaleDateString('zh-CN')}
                             </span>
@@ -520,14 +515,12 @@ export function TrainingDataManager({ datasourceId, datasourceName }: TrainingDa
                             )}
                           </div>
                           
-                          {item.table_names && item.table_names.length > 0 && (
+                          {item.table_name && (
                             <div className="flex items-center gap-1 flex-wrap">
                               <span className="text-xs text-muted-foreground">表:</span>
-                              {item.table_names.map((table, index) => (
-                                <Badge key={index} variant="outline" className="text-xs">
-                                  {table}
-                                </Badge>
-                              ))}
+                              <Badge variant="outline" className="text-xs">
+                                {item.table_name}
+                              </Badge>
                             </div>
                           )}
                         </div>

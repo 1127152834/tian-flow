@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Vanna AI module for DeerFlow
+Vanna AI module for Olight
 
 Provides Text-to-SQL functionality implementation
 """

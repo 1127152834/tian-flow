@@ -4,7 +4,6 @@
 from langgraph.graph import MessagesState
 
 from src.prompts.planner_model import Plan
-from src.rag import Resource
 
 
 class State(MessagesState):
@@ -14,7 +13,7 @@ class State(MessagesState):
     locale: str = "en-US"
     research_topic: str = ""
     observations: list[str] = []
-    resources: list[Resource] = []
+    resources: list[dict] = []
     plan_iterations: int = 0
     current_plan: Plan | str = None
     final_report: str = ""

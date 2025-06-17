@@ -1,7 +1,7 @@
 """
 资源发现模块 API 路由
 
-基于 Ti-Flow 的意图识别 API 设计，为 DeerFlow 提供资源发现和匹配接口
+基于 Ti-Flow 的意图识别 API 设计，为 Olight 提供资源发现和匹配接口
 """
 
 import logging
@@ -49,14 +49,14 @@ async def discover_resources(
 ):
     """
     智能资源发现
-    
+
     根据用户查询找到最匹配的系统资源
     """
     try:
         start_time = datetime.utcnow()
-        
+
         logger.info(f"🔍 资源发现请求: '{request.user_query}'")
-        
+
         # 执行资源匹配
         matches = await matcher.match_resources(
             session=session,
@@ -65,14 +65,14 @@ async def discover_resources(
             resource_types=[rt.value for rt in request.resource_types] if request.resource_types else None,
             min_confidence=request.min_confidence
         )
-        
+
         # 获取总资源数量
         from sqlalchemy import text
         count_query = text("SELECT COUNT(*) FROM resource_discovery.resource_registry WHERE is_active = true")
         total_resources = session.execute(count_query).scalar()
-        
+
         processing_time = (datetime.utcnow() - start_time).total_seconds() * 1000
-        
+
         response = ResourceDiscoveryResponse(
             query=request.user_query,
             matches=matches,
@@ -80,13 +80,104 @@ async def discover_resources(
             processing_time_ms=processing_time,
             timestamp=datetime.utcnow()
         )
-        
+
         logger.info(f"✅ 资源发现完成: 找到 {len(matches)} 个匹配资源，耗时 {processing_time:.0f}ms")
         return response
-        
+
     except Exception as e:
         logger.error(f"❌ 资源发现失败: {e}")
         raise HTTPException(status_code=500, detail=f"资源发现失败: {str(e)}")
+
+
+@router.post("/test-match")
+async def test_resource_matching(
+    request: dict,
+    session: Session = Depends(get_db_session)
+):
+    """
+    资源发现测试接口
+
+    类似 Ti-Flow 的意图识别测试功能，用于测试资源匹配效果
+    """
+    try:
+        import time
+        start_time = time.time()
+
+        # 解析请求参数
+        query = request.get("query", "").strip()
+        top_k = request.get("top_k", 5)
+        min_confidence = request.get("min_confidence", 0.1)
+        resource_types = request.get("resource_types", None)
+
+        if not query:
+            raise HTTPException(status_code=400, detail="查询内容不能为空")
+
+        logger.info(f"🧪 资源匹配测试: '{query}', top_k={top_k}, min_confidence={min_confidence}")
+
+        # 执行资源匹配
+        matches = await matcher.match_resources(
+            session=session,
+            user_query=query,
+            top_k=top_k,
+            min_confidence=min_confidence,
+            resource_types=resource_types
+        )
+
+        processing_time = time.time() - start_time
+
+        # 格式化匹配结果
+        formatted_matches = []
+        for match in matches:
+            # 计算置信度级别
+            confidence_level = "low"
+            if match.confidence_score >= 0.8:
+                confidence_level = "high"
+            elif match.confidence_score >= 0.6:
+                confidence_level = "medium"
+
+            formatted_match = {
+                "resource_id": match.resource.resource_id,
+                "resource_name": match.resource.resource_name,
+                "resource_type": match.resource.resource_type,
+                "description": match.resource.description or "",
+                "capabilities": match.resource.capabilities or [],
+                "similarity_score": round(match.similarity_score, 3),
+                "confidence_score": round(match.confidence_score, 3),
+                "confidence": confidence_level,
+                "reasoning": f"基于向量相似度匹配，相似度: {match.similarity_score:.3f}",
+                "detailed_scores": {
+                    "similarity": round(match.similarity_score, 3),
+                    "confidence": round(match.confidence_score, 3)
+                }
+            }
+            formatted_matches.append(formatted_match)
+
+        # 确定最佳匹配
+        best_match = formatted_matches[0] if formatted_matches else None
+
+        response_data = {
+            "query": query,
+            "total_matches": len(formatted_matches),
+            "matches": formatted_matches,
+            "best_match": best_match,
+            "processing_time": round(processing_time, 3),
+            "parameters": {
+                "top_k": top_k,
+                "min_confidence": min_confidence,
+                "resource_types": resource_types
+            }
+        }
+
+        logger.info(f"✅ 资源匹配测试完成: 找到 {len(formatted_matches)} 个匹配结果, 耗时 {processing_time:.3f}s")
+
+        return {
+            "success": True,
+            "data": response_data
+        }
+
+    except Exception as e:
+        logger.error(f"❌ 资源匹配测试失败: {e}")
+        raise HTTPException(status_code=500, detail=f"资源匹配测试失败: {str(e)}")
 
 
 @router.get("/resources", response_model=List[ResourceRegistryResponse])
@@ -440,6 +531,91 @@ async def get_system_status(
         raise HTTPException(status_code=500, detail=f"获取系统状态失败: {str(e)}")
 
 
+@router.get("/change-detection", response_model=dict)
+async def detect_resource_changes(
+    preview_only: bool = Query(True, description="是否仅预览变更"),
+    session: Session = Depends(get_db_session)
+):
+    """检测资源变更"""
+    try:
+        logger.info(f"🔍 开始检测资源变更 (预览模式: {preview_only})")
+
+        # 使用资源发现服务检测变更
+        changes = await discovery_service.detect_resource_changes(session, preview_only)
+
+        # 统计变更
+        added_count = len(changes.get('added', []))
+        modified_count = len(changes.get('modified', []))
+        deleted_count = len(changes.get('deleted', []))
+        total_changes = added_count + modified_count + deleted_count
+
+        response = {
+            "success": True,
+            "preview_only": preview_only,
+            "total_changes": total_changes,
+            "change_summary": {
+                "added_count": added_count,
+                "modified_count": modified_count,
+                "deleted_count": deleted_count
+            },
+            "changes": changes,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        logger.info(f"✅ 变更检测完成: 新增{added_count}, 修改{modified_count}, 删除{deleted_count}")
+        return response
+
+    except Exception as e:
+        logger.error(f"❌ 检测资源变更失败: {e}")
+        raise HTTPException(status_code=500, detail=f"检测资源变更失败: {str(e)}")
+
+
+@router.post("/incremental-sync", response_model=dict)
+async def incremental_sync(
+    force_full_sync: bool = Query(False, description="是否强制全量同步"),
+    async_mode: bool = Query(True, description="是否异步执行")
+):
+    """增量同步资源"""
+    try:
+        logger.info(f"🔄 启动增量同步: force_full={force_full_sync}, async={async_mode}")
+
+        if async_mode:
+            # 异步模式：启动后台任务
+            from src.tasks.resource_discovery_tasks import incremental_sync_task
+            task = incremental_sync_task.delay(force_full_sync)
+
+            return {
+                "success": True,
+                "message": "增量同步任务已启动",
+                "task_id": task.id,
+                "status": "started",
+                "force_full_sync": force_full_sync,
+                "async_mode": True
+            }
+        else:
+            # 同步模式：直接执行
+            start_time = datetime.utcnow()
+
+            # 执行增量同步
+            result = await synchronizer.incremental_sync(force_full_sync)
+
+            processing_time = (datetime.utcnow() - start_time).total_seconds() * 1000
+
+            return {
+                "success": True,
+                "message": "增量同步完成",
+                "result": result,
+                "processing_time_ms": processing_time,
+                "force_full_sync": force_full_sync,
+                "async_mode": False,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+    except Exception as e:
+        logger.error(f"❌ 增量同步失败: {e}")
+        raise HTTPException(status_code=500, detail=f"增量同步失败: {str(e)}")
+
+
 @router.get("/statistics", response_model=dict)
 async def get_statistics(
     session: Session = Depends(get_db_session)
@@ -447,10 +623,10 @@ async def get_statistics(
     """获取资源发现统计信息"""
     try:
         from sqlalchemy import text
-        
+
         # 资源统计
         resource_stats_query = text("""
-            SELECT 
+            SELECT
                 resource_type,
                 COUNT(*) as total_count,
                 COUNT(*) FILTER (WHERE is_active = true) as active_count,
@@ -458,20 +634,20 @@ async def get_statistics(
             FROM resource_discovery.resource_registry
             GROUP BY resource_type
         """)
-        
+
         resource_result = session.execute(resource_stats_query)
         resource_stats = {}
-        
+
         for row in resource_result.fetchall():
             resource_stats[row.resource_type] = {
                 "total": row.total_count,
                 "active": row.active_count,
                 "vectorized": row.vectorized_count
             }
-        
+
         # 匹配统计
         match_stats_query = text("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_queries,
                 AVG(response_time) as avg_response_time,
                 COUNT(*) FILTER (WHERE user_feedback = 'positive') as positive_feedback,
@@ -479,23 +655,23 @@ async def get_statistics(
             FROM resource_discovery.resource_match_history
             WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
         """)
-        
+
         match_result = session.execute(match_stats_query)
         match_row = match_result.fetchone()
-        
+
         match_stats = {
             "total_queries": match_row.total_queries or 0,
             "avg_response_time": float(match_row.avg_response_time or 0),
             "positive_feedback": match_row.positive_feedback or 0,
             "negative_feedback": match_row.negative_feedback or 0
         }
-        
+
         return {
             "resource_statistics": resource_stats,
             "match_statistics": match_stats,
             "last_updated": datetime.utcnow().isoformat()
         }
-        
+
     except Exception as e:
         logger.error(f"获取统计信息失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")

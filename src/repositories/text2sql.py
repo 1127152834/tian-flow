@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Text2SQL repository for DeerFlow.
+Text2SQL repository for Olight.
 
 Provides data access layer for Text2SQL functionality including query history,
 training data, SQL query cache, and training sessions.
@@ -344,6 +344,7 @@ class Text2SQLRepository:
                             sql_query,
                             table_name,
                             column_name,
+                            embedding_vector,
                             created_at,
                             updated_at,
                             metadata
@@ -358,6 +359,40 @@ class Text2SQLRepository:
 
                     for row in rows:
                         # Convert vanna_embeddings row to VannaEmbedding format
+                        # Get embedding vector if available
+                        embedding_vector = []
+                        raw_vector = row.get('embedding_vector')
+
+                        # Debug: log all vector-related info
+                        logger.info(f"Row ID: {row.get('id')}, embedding_vector exists: {raw_vector is not None}, type: {type(raw_vector)}")
+
+                        if raw_vector is not None:
+                            try:
+                                logger.info(f"Raw embedding_vector type: {type(raw_vector)}, length: {len(str(raw_vector))}")
+
+                                # PostgreSQL vector type returns as string like "[1.0,2.0,3.0]"
+                                if isinstance(raw_vector, list):
+                                    # Already a list
+                                    embedding_vector = [float(x) for x in raw_vector]
+                                elif isinstance(raw_vector, str):
+                                    # PostgreSQL vector type string format: "[1.0,2.0,3.0]"
+                                    vector_str = raw_vector.strip()
+                                    if vector_str:
+                                        # Handle both "[...]" and "{...}" formats
+                                        if (vector_str.startswith('[') and vector_str.endswith(']')) or \
+                                           (vector_str.startswith('{') and vector_str.endswith('}')):
+                                            # Remove brackets/braces and split by comma
+                                            vector_str = vector_str[1:-1]  # Remove [ ] or { }
+                                            if vector_str.strip():  # Check if not empty
+                                                # Split by comma and convert to float
+                                                embedding_vector = [float(x.strip()) for x in vector_str.split(',') if x.strip()]
+
+                                logger.info(f"Parsed embedding_vector length: {len(embedding_vector)}")
+                            except (TypeError, ValueError, AttributeError) as e:
+                                logger.warning(f"Failed to parse embedding vector: {e}")
+                                logger.warning(f"Raw vector sample: {str(raw_vector)[:100]}...")
+                                embedding_vector = []
+
                         training_data.append(VannaEmbedding(
                             id=row['id'],
                             datasource_id=row['datasource_id'],
@@ -368,7 +403,7 @@ class Text2SQLRepository:
                             sql_query=row['sql_query'],
                             table_name=row['table_name'],
                             column_name=row['column_name'],
-                            embedding_vector=[],  # Vector not needed for listing
+                            embedding_vector=embedding_vector,
                             metadata=row['metadata'],
                             created_at=row['created_at'],
                             updated_at=row['updated_at']
@@ -391,13 +426,38 @@ class Text2SQLRepository:
                         SELECT
                             id, datasource_id, content, content_type, content_hash,
                             question, sql_query, table_name, column_name,
-                            created_at, updated_at, metadata
+                            embedding_vector, created_at, updated_at, metadata
                         FROM text2sql.vanna_embeddings
                         WHERE id = %s
                     """, (training_id,))
 
                     row = cursor.fetchone()
                     if row:
+                        # Get embedding vector if available
+                        embedding_vector = []
+                        if row.get('embedding_vector'):
+                            try:
+                                raw_vector = row['embedding_vector']
+                                # PostgreSQL vector type returns as string like "[1.0,2.0,3.0]"
+                                if isinstance(raw_vector, list):
+                                    # Already a list
+                                    embedding_vector = [float(x) for x in raw_vector]
+                                elif isinstance(raw_vector, str):
+                                    # PostgreSQL vector type string format: "[1.0,2.0,3.0]"
+                                    vector_str = raw_vector.strip()
+                                    if vector_str:
+                                        # Handle both "[...]" and "{...}" formats
+                                        if (vector_str.startswith('[') and vector_str.endswith(']')) or \
+                                           (vector_str.startswith('{') and vector_str.endswith('}')):
+                                            # Remove brackets/braces and split by comma
+                                            vector_str = vector_str[1:-1]  # Remove [ ] or { }
+                                            if vector_str.strip():  # Check if not empty
+                                                # Split by comma and convert to float
+                                                embedding_vector = [float(x.strip()) for x in vector_str.split(',') if x.strip()]
+                            except (TypeError, ValueError, AttributeError) as e:
+                                logger.warning(f"Failed to parse embedding vector: {e}")
+                                embedding_vector = []
+
                         return VannaEmbedding(
                             id=row['id'],
                             datasource_id=row['datasource_id'],
@@ -408,7 +468,7 @@ class Text2SQLRepository:
                             sql_query=row['sql_query'],
                             table_name=row['table_name'],
                             column_name=row['column_name'],
-                            embedding_vector=[],  # Vector not needed for basic operations
+                            embedding_vector=embedding_vector,
                             metadata=row['metadata'],
                             created_at=row['created_at'],
                             updated_at=row['updated_at']

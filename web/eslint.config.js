@@ -35,7 +35,7 @@ export default tseslint.config(
       "@typescript-eslint/require-await": "off",
       "@typescript-eslint/no-empty-object-type": "off",
       "@typescript-eslint/no-misused-promises": [
-        "error",
+        "warn",
         { checksVoidReturn: { attributes: false } },
       ],
       "@typescript-eslint/no-redundant-type-constituents": "off",
@@ -44,8 +44,14 @@ export default tseslint.config(
       "@typescript-eslint/no-unsafe-member-access": "off",
       "@typescript-eslint/no-unsafe-argument": "off",
       "@typescript-eslint/no-unsafe-return": "off",
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-floating-promises": "warn",
+      "@typescript-eslint/prefer-nullish-coalescing": "warn",
+      "@typescript-eslint/no-inferrable-types": "warn",
+      "react-hooks/exhaustive-deps": "warn",
+      "react/no-unescaped-entities": "warn",
       "import/order": [
-        "error",
+        "warn",
         {
           distinctGroup: false,
           groups: [

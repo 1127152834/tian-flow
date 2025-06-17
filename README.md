@@ -144,27 +144,18 @@ Open your browser and visit [`http://localhost:3000`](http://localhost:3000) to 
 
 Explore more details in the [`web`](./web/) directory.
 
-## Supported Search Engines
+## Data Sources
 
-DeerFlow supports multiple search engines that can be configured in your `.env` file using the `SEARCH_API` variable:
+DeerFlow now focuses on organizational data analysis using internal resources:
 
-- **Tavily** (default): A specialized search API for AI applications
-
-  - Requires `TAVILY_API_KEY` in your `.env` file
-  - Sign up at: https://app.tavily.com/home
-
-- **DuckDuckGo**: Privacy-focused search engine
-
-  - No API key required
-
-- **Brave Search**: Privacy-focused search engine with advanced features
-
-  - Requires `BRAVE_SEARCH_API_KEY` in your `.env` file
-  - Sign up at: https://brave.com/search/api/
-
-- **Arxiv**: Scientific paper search for academic research
-  - No API key required
-  - Specialized for scientific and academic papers
+- **Database Queries**: Direct SQL queries to organizational databases
+- **API Integrations**: Calls to internal and external APIs
+- **Knowledge Base**: Retrieval from organizational knowledge repositories
+- **Manufacturing Data**: Specialized analysis of Olight's four core databases:
+  - **oim-qms-prod**: Quality management system
+  - **oim-srm-prod**: Supplier relationship management
+  - **oim-mes-prod**: Manufacturing execution system
+  - **oim-wms-prod**: Warehouse management system
 
 To configure your preferred search engine, set the `SEARCH_API` variable in your `.env` file:
 

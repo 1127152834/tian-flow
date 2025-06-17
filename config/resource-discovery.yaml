@@ -7,11 +7,50 @@ resource_discovery:
     # 相似度阈值 (0.0-1.0)
     similarity_threshold: 0.3
     # 最大返回结果数
-    max_results: 10
+    max_results: 5
     # 向量化批处理大小
     batch_size: 100
     # 向量化超时时间(秒)
     timeout_seconds: 30
+
+  # 匹配器配置 (参考 Ti-Flow)
+  matcher_config:
+    # 置信度权重配置
+    confidence_weights:
+      similarity: 0.6      # 相似度权重
+      usage_history: 0.2   # 使用历史权重
+      performance: 0.1     # 性能指标权重
+      context: 0.1         # 上下文相关性权重
+
+    # 多向量类型权重配置 (默认权重)
+    vector_type_weights:
+      name: 0.3           # 名称向量权重
+      description: 0.4    # 描述向量权重
+      capabilities: 0.2   # 能力向量权重
+      composite: 0.1      # 综合向量权重
+
+    # 针对不同资源类型的特殊权重配置
+    resource_type_weights:
+      TEXT2SQL:
+        name: 0.4         # SQL 查询名称很重要
+        description: 0.3  # 描述次之
+        capabilities: 0.2 # 能力
+        composite: 0.1    # 综合
+      DATABASE:
+        name: 0.2         # 数据库名称不是最重要的
+        description: 0.3  # 描述重要
+        capabilities: 0.3 # 能力很重要
+        composite: 0.2    # 综合
+      API:
+        name: 0.3         # API名称重要
+        description: 0.3  # 描述同样重要
+        capabilities: 0.2 # 能力
+        composite: 0.2    # 综合
+      TOOL:
+        name: 0.3         # 工具名称重要
+        description: 0.4  # 描述最重要
+        capabilities: 0.2 # 能力
+        composite: 0.1    # 综合
     
   # 资源表配置
   resources:
@@ -24,7 +63,7 @@ resource_discovery:
 
     # Text2SQL训练数据表
     - table: "text2sql.vanna_embeddings"
-      fields: ["content", "sql_query", "question"]
+      fields: ["content", "sql_query", "question", "table_name", "datasource_id", "content_type"]
       tool: "text2sql_query"
       description: "Text2SQL训练数据表 - 存储SQL查询示例和问题"
       enabled: true

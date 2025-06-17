@@ -134,7 +134,7 @@ export function SettingsDialog() {
                             "border-primary-foreground text-primary-foreground",
                         )}
                       >
-                        {'badge' in tab ? tab.badge : ''}
+                        {('badge' in tab ? tab.badge : '') as React.ReactNode}
                       </Badge>
                     )}
                   </li>

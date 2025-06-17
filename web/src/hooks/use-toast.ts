@@ -14,7 +14,7 @@ interface ToastProps {
 
 export function useToast() {
   const toast = ({ title, description, variant = "default", duration }: ToastProps) => {
-    const message = title || description || "";
+    const message = title ?? description ?? "";
     const desc = title && description ? description : undefined;
 
     if (variant === "destructive") {

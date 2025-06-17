@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Database datasource repository for DeerFlow.
+Database datasource repository for Olight.
 
 Provides database persistence layer for datasource management using PostgreSQL.
 """
@@ -207,9 +207,9 @@ class DatabaseDatasourceRepository:
                         params.append(connection_status.value)
                     
                     if search:
-                        where_conditions.append("(name ILIKE %s OR description ILIKE %s)")
+                        where_conditions.append("(name ILIKE %s OR description ILIKE %s OR database_name ILIKE %s)")
                         search_pattern = f"%{search}%"
-                        params.extend([search_pattern, search_pattern])
+                        params.extend([search_pattern, search_pattern, search_pattern])
                     
                     where_clause = " AND ".join(where_conditions)
                     

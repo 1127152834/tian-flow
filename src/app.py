@@ -8,6 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.graph.builder import build_graph_with_memory
 from src.config import BRANDING
 
+# Initialize LangSmith tracing
+from src.config.langsmith import setup_langsmith_tracing, log_langsmith_status
+setup_langsmith_tracing()
+log_langsmith_status()
+
 # 导入统一的路由管理
 from src.api.routes import api_router
 

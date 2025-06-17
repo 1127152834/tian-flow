@@ -38,7 +38,8 @@ export function EditTrainingDataDialog({
     content: '',
     question: '',
     sql_query: '',
-    table_names: [],
+    table_name: '',
+    column_name: '',
     metadata: {},
   });
   const [hasChanges, setHasChanges] = useState(false);
@@ -53,7 +54,8 @@ export function EditTrainingDataDialog({
         content: item.content,
         question: item.question || '',
         sql_query: item.sql_query || '',
-        table_names: item.table_names || [],
+        table_name: item.table_name || '',
+        column_name: item.column_name || '',
         metadata: item.metadata || {},
       };
       setFormData(initialData);
@@ -65,11 +67,20 @@ export function EditTrainingDataDialog({
   // Check for changes whenever formData updates
   useEffect(() => {
     if (originalData) {
-      const changed =
+      const changed = item?.content_type === 'SQL' ? (
+        // 对于 SQL 类型，主要检查 sql_query 和 question 的变化
+        formData.sql_query !== originalData.sql_query ||
+        formData.question !== originalData.question ||
+        formData.table_name !== originalData.table_name ||
+        formData.column_name !== originalData.column_name
+      ) : (
+        // 对于其他类型，检查 content 的变化
         formData.content !== originalData.content ||
         formData.question !== originalData.question ||
         formData.sql_query !== originalData.sql_query ||
-        JSON.stringify(formData.table_names) !== JSON.stringify(originalData.table_names);
+        formData.table_name !== originalData.table_name ||
+        formData.column_name !== originalData.column_name
+      );
       setHasChanges(changed);
     }
   }, [formData, originalData]);
@@ -80,20 +91,21 @@ export function EditTrainingDataDialog({
     const request: TrainingDataRequest = {
       datasource_id: item.datasource_id,
       content_type: formData.content_type as any,
-      content: formData.content.trim(),
+      content: item?.content_type === 'SQL' ?
+        // 对于 SQL 类型，content 保持原样（组合内容），但会在后端重新生成
+        item.content :
+        formData.content.trim(),
       question: formData.question?.trim() || undefined,
       sql_query: formData.sql_query?.trim() || undefined,
-      table_names: formData.table_names?.filter(name => name.trim()) || [],
+      table_name: formData.table_name?.trim() || undefined,
+      column_name: formData.column_name?.trim() || undefined,
       metadata: formData.metadata || {},
     };
 
     await onSave(request);
   };
 
-  const handleTableNamesChange = (value: string) => {
-    const tableNames = value.split(',').map(name => name.trim()).filter(name => name);
-    setFormData(prev => ({ ...prev, table_names: tableNames }));
-  };
+  // Remove the handleTableNamesChange function since we're using single table_name now
 
   if (!item) return null;
 
@@ -143,10 +155,10 @@ export function EditTrainingDataDialog({
               <Label htmlFor="table_name">表名</Label>
               <Input
                 id="table_name"
-                value={formData.table_names?.[0] || ''}
+                value={formData.table_name || ''}
                 onChange={(e) => setFormData(prev => ({
                   ...prev,
-                  table_names: e.target.value ? [e.target.value] : []
+                  table_name: e.target.value
                 }))}
                 placeholder="表名..."
               />
@@ -164,8 +176,19 @@ export function EditTrainingDataDialog({
             </Label>
             <Textarea
               id="content"
-              value={formData.content || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+              value={
+                // 对于 SQL 类型，显示 sql_query 字段而不是 content 字段
+                item?.content_type === 'SQL' ? (formData.sql_query || '') : (formData.content || '')
+              }
+              onChange={(e) => {
+                if (item?.content_type === 'SQL') {
+                  // 对于 SQL 类型，更新 sql_query 字段
+                  setFormData(prev => ({ ...prev, sql_query: e.target.value }));
+                } else {
+                  // 对于其他类型，更新 content 字段
+                  setFormData(prev => ({ ...prev, content: e.target.value }));
+                }
+              }}
               placeholder={
                 item?.content_type === 'SQL' ? 'SELECT * FROM users WHERE...' :
                 item?.content_type === 'DDL' ? 'CREATE TABLE users (\n  id INTEGER PRIMARY KEY,\n  name VARCHAR(100)\n);' :
@@ -210,28 +233,25 @@ export function EditTrainingDataDialog({
             </div>
           )}
 
-          {/* Table Names - different for different types */}
+          {/* Table Name - for SQL and other types */}
           {item?.content_type !== 'DDL' && (
             <div className="space-y-2">
-              <Label htmlFor="table_names">
-                相关表名（可选）
-                {item?.content_type === 'SQL' && <span className="text-xs text-muted-foreground ml-2">- SQL查询中涉及的表</span>}
-                {item?.content_type === 'SCHEMA' && <span className="text-xs text-muted-foreground ml-2">- 架构中包含的表</span>}
-                {item?.content_type === 'DOCUMENTATION' && <span className="text-xs text-muted-foreground ml-2">- 文档中提到的表</span>}
+              <Label htmlFor="table_name">
+                主要表名（可选）
+                {item?.content_type === 'SQL' && <span className="text-xs text-muted-foreground ml-2">- SQL查询的主要表</span>}
+                {item?.content_type === 'SCHEMA' && <span className="text-xs text-muted-foreground ml-2">- 架构的主要表</span>}
+                {item?.content_type === 'DOCUMENTATION' && <span className="text-xs text-muted-foreground ml-2">- 文档提到的主要表</span>}
               </Label>
               <Input
-                id="table_names"
-                value={formData.table_names?.join(', ') || ''}
-                onChange={(e) => handleTableNamesChange(e.target.value)}
+                id="table_name"
+                value={formData.table_name || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, table_name: e.target.value }))}
                 placeholder={
-                  item?.content_type === 'SQL' ? 'users, orders, products...' :
-                  item?.content_type === 'SCHEMA' ? 'table1, table2, table3...' :
-                  '相关表名...'
+                  item?.content_type === 'SQL' ? 'users' :
+                  item?.content_type === 'SCHEMA' ? 'main_table' :
+                  '主要表名...'
                 }
               />
-              <p className="text-xs text-muted-foreground">
-                多个表名用逗号分隔
-              </p>
             </div>
           )}
 
@@ -241,10 +261,12 @@ export function EditTrainingDataDialog({
               <Label>元数据</Label>
               <div className="text-sm text-muted-foreground space-y-1">
                 <div>创建时间: {new Date(item.created_at).toLocaleString('zh-CN')}</div>
-                <div>更新时间: {new Date(item.updated_at).toLocaleString('zh-CN')}</div>
-                <div>验证状态: {item.is_validated ? '已验证' : '未验证'}</div>
-                {item.validation_score && (
-                  <div>验证分数: {item.validation_score.toFixed(2)}</div>
+                {item.updated_at && (
+                  <div>更新时间: {new Date(item.updated_at).toLocaleString('zh-CN')}</div>
+                )}
+                <div>内容哈希: {item.content_hash}</div>
+                {item.embedding_vector && (
+                  <div>向量维度: {item.embedding_vector.length}</div>
                 )}
               </div>
             </div>

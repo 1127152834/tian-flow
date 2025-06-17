@@ -18,4 +18,9 @@ AGENT_LLM_MAP: dict[str, LLMType] = {
     "ppt_composer": "basic",
     "prose_writer": "basic",
     "prompt_enhancer": "basic",
+    # Olight Manufacturing Specialists
+    "quality_analyst": "basic",
+    "procurement_analyst": "basic",
+    "manufacturing_analyst": "basic",
+    "warehouse_analyst": "basic",
 }

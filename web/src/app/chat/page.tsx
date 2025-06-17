@@ -11,6 +11,7 @@ import { Logo } from "~/components/deer-flow/logo";
 import { ThemeToggle } from "~/components/deer-flow/theme-toggle";
 import { LanguageSwitcher } from "~/components/deer-flow/language-switcher";
 import { SettingsDialog } from "../[locale]/settings/dialogs/settings-dialog";
+import { WebSocketStatus } from "~/components/websocket-status";
 
 const Main = dynamic(() => import("../[locale]/chat/main"), {
   ssr: false,
@@ -27,6 +28,7 @@ export default function ChatPage() {
       <header className="fixed top-0 left-0 flex h-12 w-full items-center justify-between px-4">
         <Logo />
         <div className="flex items-center gap-2">
+          <WebSocketStatus />
           <LanguageSwitcher />
           <ThemeToggle />
           <Suspense>

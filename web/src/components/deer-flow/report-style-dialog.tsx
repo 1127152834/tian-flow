@@ -26,33 +26,33 @@ export function ReportStyleDialog() {
 
   const REPORT_STYLES = [
     {
-      value: "academic" as const,
-      label: t('chat.reportStyle.academic.label'),
-      description: t('chat.reportStyle.academic.description'),
+      value: "technical_report" as const,
+      label: t('chat.reportStyle.technicalReport.label'),
+      description: t('chat.reportStyle.technicalReport.description'),
       icon: GraduationCap,
     },
     {
-      value: "popular_science" as const,
-      label: t('chat.reportStyle.popularScience.label'),
-      description: t('chat.reportStyle.popularScience.description'),
+      value: "operation_manual" as const,
+      label: t('chat.reportStyle.operationManual.label'),
+      description: t('chat.reportStyle.operationManual.description'),
       icon: FileText,
     },
     {
-      value: "news" as const,
-      label: t('chat.reportStyle.news.label'),
-      description: t('chat.reportStyle.news.description'),
+      value: "quality_documentation" as const,
+      label: t('chat.reportStyle.qualityDocumentation.label'),
+      description: t('chat.reportStyle.qualityDocumentation.description'),
       icon: Newspaper,
     },
     {
-      value: "social_media" as const,
-      label: t('chat.reportStyle.socialMedia.label'),
-      description: t('chat.reportStyle.socialMedia.description'),
+      value: "business_report" as const,
+      label: t('chat.reportStyle.businessReport.label'),
+      description: t('chat.reportStyle.businessReport.description'),
       icon: Users,
     },
   ];
 
   const handleStyleChange = (
-    style: "academic" | "popular_science" | "news" | "social_media",
+    style: "technical_report" | "operation_manual" | "quality_documentation" | "business_report",
   ) => {
     setReportStyle(style);
     setOpen(false);

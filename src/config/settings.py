@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Settings configuration for DeerFlow.
+Settings configuration for Olight.
 
 Provides configuration management for embedding and rerank models.
 """

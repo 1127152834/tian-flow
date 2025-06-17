@@ -54,6 +54,62 @@ class LoggingConfig:
     log_vectorization: bool = True
 
 
+@dataclass
+class MatcherConfig:
+    """匹配器配置"""
+    # 置信度权重配置
+    confidence_weights: Dict[str, float] = None
+    # 多向量类型权重配置
+    vector_type_weights: Dict[str, float] = None
+    # 针对不同资源类型的特殊权重配置
+    resource_type_weights: Dict[str, Dict[str, float]] = None
+
+    def __post_init__(self):
+        if self.confidence_weights is None:
+            self.confidence_weights = {
+                "similarity": 0.6,
+                "usage_history": 0.2,
+                "performance": 0.1,
+                "context": 0.1
+            }
+
+        if self.vector_type_weights is None:
+            self.vector_type_weights = {
+                "name": 0.3,
+                "description": 0.4,
+                "capabilities": 0.2,
+                "composite": 0.1
+            }
+
+        if self.resource_type_weights is None:
+            self.resource_type_weights = {
+                "TEXT2SQL": {
+                    "name": 0.4,
+                    "description": 0.3,
+                    "capabilities": 0.2,
+                    "composite": 0.1
+                },
+                "DATABASE": {
+                    "name": 0.2,
+                    "description": 0.3,
+                    "capabilities": 0.3,
+                    "composite": 0.2
+                },
+                "API": {
+                    "name": 0.3,
+                    "description": 0.3,
+                    "capabilities": 0.2,
+                    "composite": 0.2
+                },
+                "TOOL": {
+                    "name": 0.3,
+                    "description": 0.4,
+                    "capabilities": 0.2,
+                    "composite": 0.1
+                }
+            }
+
+
 class ResourceDiscoveryConfig:
     """资源发现配置管理器"""
     
@@ -78,6 +134,7 @@ class ResourceDiscoveryConfig:
 
         # 配置对象
         self.vector_config: VectorConfig = VectorConfig()
+        self.matcher_config: MatcherConfig = MatcherConfig()
         self.resources: List[ResourceConfig] = []
         self.trigger_config: TriggerConfig = TriggerConfig()
         self.logging_config: LoggingConfig = LoggingConfig()
@@ -119,6 +176,14 @@ class ResourceDiscoveryConfig:
             max_results=vector_config_data.get('max_results', 10),
             batch_size=vector_config_data.get('batch_size', 100),
             timeout_seconds=vector_config_data.get('timeout_seconds', 30)
+        )
+
+        # 解析匹配器配置
+        matcher_config_data = rd_config.get('matcher_config', {})
+        self.matcher_config = MatcherConfig(
+            confidence_weights=matcher_config_data.get('confidence_weights'),
+            vector_type_weights=matcher_config_data.get('vector_type_weights'),
+            resource_type_weights=matcher_config_data.get('resource_type_weights')
         )
         
         # 解析资源配置
@@ -229,6 +294,11 @@ class ResourceDiscoveryConfig:
                 "max_results": self.vector_config.max_results,
                 "batch_size": self.vector_config.batch_size,
                 "timeout_seconds": self.vector_config.timeout_seconds
+            },
+            "matcher_config": {
+                "confidence_weights": self.matcher_config.confidence_weights,
+                "vector_type_weights": self.matcher_config.vector_type_weights,
+                "resource_type_weights": self.matcher_config.resource_type_weights
             },
             "resources": [
                 {

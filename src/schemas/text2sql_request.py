@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Text2SQL request/response models for DeerFlow API.
+Text2SQL request/response models for Olight API.
 Following deer-flow's API pattern with separate request/response files.
 """
 

@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
-from .tools import SELECTED_SEARCH_ENGINE, SearchEngine
+# 搜索引擎功能已移除
 from .loader import load_yaml_config
 from .questions import BUILT_IN_QUESTIONS, BUILT_IN_QUESTIONS_ZH_CN
 from .branding import BRANDING, BrandingConfig, load_branding_config
@@ -10,6 +10,13 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Initialize LangSmith tracing
+from .langsmith import setup_langsmith_tracing, log_langsmith_status
+
+# Setup LangSmith tracing on module import
+setup_langsmith_tracing()
+log_langsmith_status()
 
 # Team configuration
 TEAM_MEMBER_CONFIGRATIONS = {

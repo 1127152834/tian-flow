@@ -23,7 +23,7 @@ class ProgressWebSocketManager:
         # 存储任务进度缓存 {task_id: progress_data}
         self.progress_cache: Dict[str, Dict[str, Any]] = {}
         # Redis连接用于进程间通信
-        self.redis_client = redis.Redis(host='localhost', port=6380, db=0)
+        self.redis_client = redis.Redis(host='localhost', port=6379, db=0)
         # Redis频道前缀
         self.redis_channel_prefix = "websocket_progress:"
         

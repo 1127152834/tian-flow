@@ -45,27 +45,31 @@ export interface TrainingDataRequest {
   content: string;
   question?: string;
   sql_query?: string;
-  table_names?: string[];
-  database_schema?: Record<string, any>;
+  table_name?: string;  // Changed from table_names to match VannaEmbedding
+  column_name?: string;
   metadata?: Record<string, any>;
 }
 
 export interface TrainingDataResponse {
   id: number;
   datasource_id: number;
+  content: string;
   content_type: string;
+  content_hash: string;
+
+  // Separate fields for different content types (matches VannaEmbedding)
   question?: string;
   sql_query?: string;
-  content: string;
-  table_names?: string[];
-  database_schema?: Record<string, any>;
+  table_name?: string;
+  column_name?: string;
+
+  // Vector and metadata
+  embedding_vector?: number[];
   metadata?: Record<string, any>;
-  content_hash: string;
-  is_active: boolean;
-  is_validated: boolean;
-  validation_score?: number;
+
+  // Timestamps
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export interface QueryHistory {
@@ -417,7 +421,6 @@ export const text2sqlApi = {
 
   // WebSocket Connection
   createWebSocket(datasourceId: number): WebSocket {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     // For WebSocket, we need to construct the URL differently
     const baseUrl = resolveServiceURL(`${API_BASE}/ws/${datasourceId}`);
     const wsUrl = baseUrl.replace(/^http/, 'ws');

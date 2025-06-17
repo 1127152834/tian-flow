@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Text2SQL API routes for DeerFlow.
+Text2SQL API routes for Olight.
 
 Provides REST API endpoints for Text2SQL functionality including SQL generation,
 training data management, and real-time WebSocket connections.
@@ -158,8 +158,8 @@ async def update_training_data(
             content=request.content,
             question=request.question,
             sql_query=request.sql_query,
-            table_names=request.table_names,
-            database_schema=request.database_schema,
+            table_name=request.table_name,
+            column_name=request.column_name,
             metadata=request.metadata
         )
 
@@ -182,17 +182,15 @@ async def update_training_data(
         return TrainingDataResponse(
             id=updated_data.id,
             datasource_id=updated_data.datasource_id,
+            content=updated_data.content,
             content_type=updated_data.content_type,
+            content_hash=updated_data.content_hash,
             question=updated_data.question,
             sql_query=updated_data.sql_query,
-            content=updated_data.content,
-            table_names=updated_data.table_names,
-            database_schema=updated_data.database_schema,
+            table_name=updated_data.table_name,
+            column_name=updated_data.column_name,
+            embedding_vector=updated_data.embedding_vector,
             metadata=updated_data.metadata,
-            content_hash=updated_data.content_hash,
-            is_active=updated_data.is_active,
-            is_validated=updated_data.is_validated,
-            validation_score=updated_data.validation_score,
             created_at=updated_data.created_at,
             updated_at=updated_data.updated_at
         )

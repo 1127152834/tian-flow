@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Services module for DeerFlow.
+Services module for Olight.
 Contains business logic and service implementations.
 """
 

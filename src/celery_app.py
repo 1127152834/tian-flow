@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Celery application configuration for DeerFlow.
+Celery application configuration for Olight.
 
 Provides distributed task queue for background processing including
 Text2SQL training, embedding generation, and data cleanup tasks.

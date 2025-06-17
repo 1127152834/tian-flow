@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Text2SQL models for DeerFlow.
+Text2SQL models for Olight.
 
 Provides data models for SQL query generation, training data management,
 and query history tracking. Adapted from ti-flow but uses configuration-based storage.
@@ -225,34 +225,38 @@ class BatchTrainingRequest(BaseModel):
 
 
 class TrainingDataRequest(BaseModel):
-    """Training data request"""
+    """Training data request - matches VannaEmbedding structure"""
     datasource_id: int = Field(..., gt=0, description="Database datasource ID")
     content_type: TrainingDataType = Field(..., description="Training data type")
+    content: str = Field(..., min_length=1, description="Training content")
     question: Optional[str] = Field(None, description="Natural language question (for SQL type)")
     sql_query: Optional[str] = Field(None, description="Corresponding SQL query (for SQL type)")
-    content: str = Field(..., min_length=1, description="Training content")
-    table_names: Optional[List[str]] = Field(None, description="Tables involved")
-    database_schema: Optional[Dict[str, Any]] = Field(None, description="Relevant schema information")
+    table_name: Optional[str] = Field(None, description="Table name (for DDL type)")
+    column_name: Optional[str] = Field(None, description="Column name (for DDL type)")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
 class TrainingDataResponse(BaseModel):
-    """Training data response"""
+    """Training data response - matches VannaEmbedding structure"""
     id: int = Field(..., description="Training data ID")
     datasource_id: int = Field(..., description="Database datasource ID")
-    content_type: TrainingDataType = Field(..., description="Training data type")
-    question: Optional[str] = Field(None, description="Natural language question")
-    sql_query: Optional[str] = Field(None, description="Corresponding SQL query")
-    content: str = Field(..., description="Training content")
-    table_names: Optional[List[str]] = Field(None, description="Tables involved")
-    database_schema: Optional[Dict[str, Any]] = Field(None, description="Relevant schema information")
+    content: str = Field(..., description="Original content")
+    content_type: TrainingDataType = Field(..., description="Content type")
+    content_hash: str = Field(..., description="Content hash for deduplication")
+
+    # Separate fields for different content types (like VannaEmbedding)
+    question: Optional[str] = Field(None, description="Natural language question (for SQL type)")
+    sql_query: Optional[str] = Field(None, description="SQL query (for SQL type)")
+    table_name: Optional[str] = Field(None, description="Table name (for DDL type)")
+    column_name: Optional[str] = Field(None, description="Column name (for DDL type)")
+
+    # Vector and metadata
+    embedding_vector: Optional[List[float]] = Field(None, description="Embedding vector")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
-    content_hash: str = Field(..., description="Content hash")
-    is_active: bool = Field(..., description="Whether active")
-    is_validated: bool = Field(..., description="Whether validated")
-    validation_score: Optional[float] = Field(None, description="Validation score")
+
+    # Timestamps
     created_at: datetime = Field(..., description="Creation time")
-    updated_at: datetime = Field(..., description="Last update time")
+    updated_at: Optional[datetime] = Field(None, description="Update time")
 
 
 class TrainingDataListResponse(BaseModel):

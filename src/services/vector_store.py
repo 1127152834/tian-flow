@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Vector store service for DeerFlow Text2SQL.
+Vector store service for Olight Text2SQL.
 
 Provides pgvector-based vector storage and similarity search for training data embeddings.
 Adapted from ti-flow but uses PostgreSQL with pgvector extension instead of TiDB.

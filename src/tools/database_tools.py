@@ -10,6 +10,7 @@
 import json
 import logging
 import asyncio
+import pandas as pd
 from typing import Dict, Any, Optional, List, Annotated
 from datetime import datetime
 
@@ -17,6 +18,7 @@ from langchain_core.tools import tool
 from src.database import get_db_session
 from src.tools.decorators import log_io
 from src.services.database_datasource import DatabaseDatasourceService
+from src.services.websocket.progress_manager import progress_ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -171,12 +173,117 @@ def database_query(
 
 @tool
 @log_io
+def search_databases(
+    search_term: Annotated[str, "搜索关键词，可以是数据库名称、描述或类型"] = "",
+    database_type: Annotated[str, "数据库类型过滤 (mysql, postgresql)"] = "",
+    enabled_only: Annotated[bool, "只显示启用的数据库"] = True
+) -> str:
+    """
+    搜索和发现数据库
+
+    根据名称、描述、类型等条件搜索数据库。支持模糊匹配。
+    """
+    try:
+        logger.info(f"🔍 搜索数据库: search_term='{search_term}', type='{database_type}', enabled_only={enabled_only}")
+
+        # 使用数据库数据源服务进行搜索
+        datasource_service = DatabaseDatasourceService()
+
+        # 转换数据库类型
+        db_type_filter = None
+        if database_type:
+            from src.models.database_datasource import DatabaseType
+            try:
+                db_type_filter = DatabaseType(database_type.upper())
+            except ValueError:
+                logger.warning(f"无效的数据库类型: {database_type}")
+
+        # 执行搜索
+        datasources = asyncio.run(datasource_service.list_datasources(
+            database_type=db_type_filter,
+            search=search_term if search_term else None,
+            limit=50,
+            offset=0
+        ))
+
+        # 过滤启用状态
+        if enabled_only:
+            datasources = [ds for ds in datasources if ds.deleted_at is None]
+
+        # 构建结果
+        databases = []
+        for ds in datasources:
+            db_info = {
+                "id": ds.id,
+                "name": ds.name,
+                "description": ds.description,
+                "type": ds.database_type.value,
+                "host": ds.host,
+                "port": ds.port,
+                "database": ds.database_name,
+                "enabled": ds.deleted_at is None,
+                "created_at": ds.created_at.isoformat() if ds.created_at else None
+            }
+            databases.append(db_info)
+
+        # 计算匹配度评分（用于排序）
+        if search_term:
+            for db in databases:
+                score = 0
+                search_lower = search_term.lower()
+
+                # 名称完全匹配得分最高
+                if db["name"].lower() == search_lower:
+                    score += 100
+                elif search_lower in db["name"].lower():
+                    score += 50
+
+                # 描述匹配
+                if db["description"] and search_lower in db["description"].lower():
+                    score += 30
+
+                # 类型匹配
+                if search_lower in db["type"].lower():
+                    score += 20
+
+                db["match_score"] = score
+
+            # 按匹配度排序
+            databases.sort(key=lambda x: x.get("match_score", 0), reverse=True)
+
+        return ToolResult(
+            success=True,
+            message=f"找到 {len(databases)} 个匹配的数据库",
+            data={
+                "databases": databases,
+                "total_count": len(databases),
+                "search_criteria": {
+                    "search_term": search_term,
+                    "database_type": database_type,
+                    "enabled_only": enabled_only
+                }
+            },
+            metadata={"search_performed": bool(search_term)}
+        ).to_json()
+
+    except Exception as e:
+        logger.error(f"❌ 搜索数据库异常: {e}")
+        return ToolResult(
+            success=False,
+            message="搜索数据库过程中发生异常",
+            error=str(e),
+            metadata={"search_term": search_term, "database_type": database_type}
+        ).to_json()
+
+
+@tool
+@log_io
 def list_databases(
     enabled_only: Annotated[bool, "只显示启用的数据库"] = True
 ) -> str:
     """
     列出可用的数据库
-    
+
     获取系统中配置的所有数据库连接信息。
     """
     try:
@@ -312,3 +419,291 @@ def test_database_connection(
             error=str(e),
             metadata={"database_name": database_name}
         ).to_json()
+
+
+@tool
+@log_io
+def find_database_by_name(
+    name_pattern: Annotated[str, "数据库名称模式，支持模糊匹配"]
+) -> str:
+    """
+    根据名称模式查找数据库
+
+    智能匹配数据库名称，支持部分匹配和模糊搜索。
+    特别适用于根据业务名称查找对应的数据库。
+    """
+    try:
+        logger.info(f"🎯 根据名称查找数据库: {name_pattern}")
+
+        # 使用数据库数据源服务进行搜索
+        datasource_service = DatabaseDatasourceService()
+
+        # 执行搜索
+        datasources = asyncio.run(datasource_service.list_datasources(
+            search=name_pattern,
+            limit=20,
+            offset=0
+        ))
+
+        # 只返回启用的数据库
+        datasources = [ds for ds in datasources if ds.deleted_at is None]
+
+        if not datasources:
+            return ToolResult(
+                success=False,
+                message=f"未找到匹配 '{name_pattern}' 的数据库",
+                error="NO_MATCHING_DATABASE"
+            ).to_json()
+
+        # 构建结果并计算匹配度
+        matches = []
+        pattern_lower = name_pattern.lower()
+
+        for ds in datasources:
+            match_info = {
+                "id": ds.id,
+                "name": ds.name,
+                "description": ds.description,
+                "type": ds.database_type.value,
+                "host": ds.host,
+                "port": ds.port,
+                "database": ds.database_name,
+                "match_type": [],
+                "match_score": 0
+            }
+
+            # 计算匹配类型和得分
+            if ds.name.lower() == pattern_lower:
+                match_info["match_type"].append("exact_name")
+                match_info["match_score"] += 100
+            elif pattern_lower in ds.name.lower():
+                match_info["match_type"].append("partial_name")
+                match_info["match_score"] += 80
+
+            if ds.description and pattern_lower in ds.description.lower():
+                match_info["match_type"].append("description")
+                match_info["match_score"] += 50
+
+            if pattern_lower in ds.database_name.lower():
+                match_info["match_type"].append("database_name")
+                match_info["match_score"] += 60
+
+            matches.append(match_info)
+
+        # 按匹配度排序
+        matches.sort(key=lambda x: x["match_score"], reverse=True)
+
+        # 如果有完全匹配，优先返回
+        exact_matches = [m for m in matches if "exact_name" in m["match_type"]]
+        if exact_matches:
+            best_match = exact_matches[0]
+            return ToolResult(
+                success=True,
+                message=f"找到完全匹配的数据库: {best_match['name']}",
+                data={
+                    "best_match": best_match,
+                    "all_matches": matches,
+                    "match_count": len(matches)
+                },
+                metadata={"search_pattern": name_pattern, "match_type": "exact"}
+            ).to_json()
+
+        # 返回最佳匹配
+        best_match = matches[0]
+        return ToolResult(
+            success=True,
+            message=f"找到 {len(matches)} 个匹配的数据库，最佳匹配: {best_match['name']}",
+            data={
+                "best_match": best_match,
+                "all_matches": matches,
+                "match_count": len(matches)
+            },
+            metadata={"search_pattern": name_pattern, "match_type": "fuzzy"}
+        ).to_json()
+
+    except Exception as e:
+        logger.error(f"❌ 根据名称查找数据库异常: {e}")
+        return ToolResult(
+            success=False,
+            message="根据名称查找数据库过程中发生异常",
+            error=str(e),
+            metadata={"name_pattern": name_pattern}
+        ).to_json()
+
+
+@tool
+@log_io
+def get_database_info(
+    identifier: Annotated[str, "数据库标识符，可以是ID、名称或描述关键词"]
+) -> str:
+    """
+    获取数据库详细信息
+
+    根据ID、名称或描述关键词获取数据库的完整信息。
+    这是一个智能查找工具，会尝试多种匹配方式。
+    """
+    try:
+        logger.info(f"📋 获取数据库信息: {identifier}")
+
+        datasource_service = DatabaseDatasourceService()
+        datasource = None
+
+        # 尝试按ID查找
+        if identifier.isdigit():
+            try:
+                datasource = asyncio.run(datasource_service.get_datasource(int(identifier)))
+                if datasource:
+                    logger.info(f"通过ID找到数据库: {datasource.name}")
+            except Exception as e:
+                logger.debug(f"按ID查找失败: {e}")
+
+        # 如果按ID没找到，尝试按名称搜索
+        if not datasource:
+            datasources = asyncio.run(datasource_service.list_datasources(
+                search=identifier,
+                limit=10,
+                offset=0
+            ))
+
+            # 过滤启用的数据库
+            enabled_datasources = [ds for ds in datasources if ds.deleted_at is None]
+
+            if enabled_datasources:
+                # 优先选择名称完全匹配的
+                exact_match = next((ds for ds in enabled_datasources
+                                  if ds.name.lower() == identifier.lower()), None)
+                datasource = exact_match or enabled_datasources[0]
+                logger.info(f"通过搜索找到数据库: {datasource.name}")
+
+        if not datasource:
+            return ToolResult(
+                success=False,
+                message=f"未找到数据库 '{identifier}'",
+                error="DATABASE_NOT_FOUND"
+            ).to_json()
+
+        # 获取数据库结构信息
+        try:
+            schema_response = asyncio.run(datasource_service.get_database_schema(datasource.id))
+            table_count = len(schema_response.tables) if schema_response else 0
+            table_names = [table.get("table_name", "") for table in schema_response.tables] if schema_response else []
+        except Exception as e:
+            logger.warning(f"获取数据库结构失败: {e}")
+            table_count = 0
+            table_names = []
+
+        # 构建详细信息
+        db_info = {
+            "basic_info": {
+                "id": datasource.id,
+                "name": datasource.name,
+                "description": datasource.description,
+                "type": datasource.database_type.value,
+                "host": datasource.host,
+                "port": datasource.port,
+                "database": datasource.database_name,
+                "enabled": datasource.deleted_at is None,
+                "created_at": datasource.created_at.isoformat() if datasource.created_at else None
+            },
+            "schema_info": {
+                "table_count": table_count,
+                "table_names": table_names[:10],  # 只显示前10个表名
+                "has_more_tables": table_count > 10
+            },
+            "connection_info": {
+                "readonly_mode": datasource.readonly_mode,
+                "allowed_operations": datasource.allowed_operations
+            }
+        }
+
+        return ToolResult(
+            success=True,
+            message=f"数据库 '{datasource.name}' 信息获取成功",
+            data=db_info,
+            metadata={
+                "identifier": identifier,
+                "found_by": "id" if identifier.isdigit() else "search"
+            }
+        ).to_json()
+
+    except Exception as e:
+        logger.error(f"❌ 获取数据库信息异常: {e}")
+        return ToolResult(
+            success=False,
+            message="获取数据库信息过程中发生异常",
+            error=str(e),
+            metadata={"identifier": identifier}
+        ).to_json()
+
+
+def _auto_generate_chart_config(data: List[Dict], title: str = "数据图表") -> Optional[Dict]:
+    """
+    根据数据自动生成图表配置
+    """
+    if not data or len(data) < 2:
+        return None
+
+    try:
+        df = pd.DataFrame(data)
+
+        # 检测数值列和分类列
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+
+        if not numeric_cols:
+            return None
+
+        # 检测时间列
+        time_cols = [col for col in df.columns if any(keyword in col.lower()
+                    for keyword in ['time', 'date', '时间', '日期', 'created', 'updated'])]
+
+        # 选择图表类型和配置
+        if time_cols and len(numeric_cols) >= 1:
+            # 时间序列 -> 折线图
+            return {
+                "type": "LineChart",
+                "title": title,
+                "width": 800,
+                "height": 400,
+                "data": data,
+                "xAxis": {"dataKey": time_cols[0], "type": "category"},
+                "yAxis": {"type": "number"},
+                "lines": [{"dataKey": numeric_cols[0], "stroke": "#8884d8", "type": "monotone"}],
+                "tooltip": {"active": True},
+                "legend": True
+            }
+        elif categorical_cols and numeric_cols:
+            # 分类数据 -> 柱状图
+            return {
+                "type": "BarChart",
+                "title": title,
+                "width": 800,
+                "height": 400,
+                "data": data,
+                "xAxis": {"dataKey": categorical_cols[0], "type": "category"},
+                "yAxis": {"type": "number"},
+                "bars": [{"dataKey": numeric_cols[0], "fill": "#8884d8"}],
+                "tooltip": {"active": True},
+                "legend": True
+            }
+        elif len(numeric_cols) >= 1 and len(df) <= 50:
+            # 纯数值数据 -> 带索引的柱状图
+            data_with_index = [{"序号": f"第{i+1}项", **row} for i, row in enumerate(data)]
+            return {
+                "type": "BarChart",
+                "title": title,
+                "width": 800,
+                "height": 400,
+                "data": data_with_index,
+                "xAxis": {"dataKey": "序号", "type": "category"},
+                "yAxis": {"type": "number"},
+                "bars": [{"dataKey": numeric_cols[0], "fill": "#8884d8"}],
+                "tooltip": {"active": True},
+                "legend": True
+            }
+
+        return None
+
+    except Exception as e:
+        logger.warning(f"自动图表生成失败: {e}")
+        return None

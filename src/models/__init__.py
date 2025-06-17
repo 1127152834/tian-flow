@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Models module for DeerFlow.
+Models module for Olight.
 Contains all data models and database schemas.
 """
 

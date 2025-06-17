@@ -48,7 +48,7 @@ export const GeneralTab: Tab = ({
     // Others
     enableBackgroundInvestigation: z.boolean(),
     enableDeepThinking: z.boolean(),
-    reportStyle: z.enum(["academic", "popular_science", "news", "social_media"]),
+    reportStyle: z.enum(["technical_report", "operation_manual", "quality_documentation", "business_report"]),
   });
   const form = useForm<z.infer<typeof generalFormSchema>>({
     resolver: zodResolver(generalFormSchema, undefined, undefined),

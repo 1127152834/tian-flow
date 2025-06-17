@@ -136,14 +136,30 @@ def discover_resources(
                 
                 # 从元数据中提取工具信息
                 tool_name = None
-                if hasattr(resource, 'metadata') and resource.metadata:
-                    tool_methods = resource.metadata.get('tool_methods', [])
+                if hasattr(resource, 'resource_metadata') and resource.resource_metadata:
+                    tool_methods = resource.resource_metadata.get('tool_methods', [])
                     if tool_methods:
                         tool_name = tool_methods[0]  # 使用第一个工具作为主要工具
                 
                 # 如果没有从元数据获取到工具，尝试从配置获取
                 if not tool_name:
+                    # 尝试直接匹配表名
                     resource_config = config.get_resource_by_table(resource.source_table)
+                    if not resource_config and resource.source_table:
+                        # 如果直接匹配失败，尝试匹配带schema的表名
+                        for config_resource in config.get_enabled_resources():
+                            config_table = config_resource.table
+                            # 检查是否是schema.table格式，如果是，提取table部分进行匹配
+                            if '.' in config_table:
+                                table_name = config_table.split('.')[-1]
+                                if table_name == resource.source_table:
+                                    resource_config = config_resource
+                                    break
+                            # 也检查完整匹配
+                            elif config_table == resource.source_table:
+                                resource_config = config_resource
+                                break
+
                     if resource_config:
                         tool_name = resource_config.tool
                 
@@ -160,7 +176,7 @@ def discover_resources(
                     "metadata": {
                         "source_table": resource.source_table,
                         "source_id": resource.source_id,
-                        "match_reasoning": match.match_reasoning
+                        "match_reasoning": match.reasoning
                     }
                 }
                 agent_resources.append(agent_resource)

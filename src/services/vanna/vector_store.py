@@ -354,12 +354,12 @@ class PgVectorStore:
                     """, (
                         self.datasource_id,
                         'SQL',  # Following ti-flow's VannaContentType.SQL
-                        sql,  # Store SQL in content field for consistency
+                        combined_content,  # Combined content for embedding
                         content_hash,
                         question,  # Store question separately (like ti-flow)
                         sql,       # Store SQL separately (like ti-flow)
                         primary_table,  # Store primary table name
-                        embedding,  # Embedding is still based on combined_content
+                        embedding,
                         json.dumps(enhanced_metadata)  # Enhanced metadata with table info
                     ))
 

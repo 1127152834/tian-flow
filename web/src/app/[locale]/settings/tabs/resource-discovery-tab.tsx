@@ -3,11 +3,12 @@
 
 "use client";
 
-import { Search, Database, Activity } from "lucide-react";
+import { Search, Database, Activity, TestTube, Loader2, AlertCircle } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useLanguage } from "~/contexts/language-context";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "~/components/ui/card";
+import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Badge } from "~/components/ui/badge";
@@ -17,7 +18,6 @@ import { resourceDiscoveryApi, type ResourceRegistryResponse } from "~/core/api/
 
 // 系统概览组件
 function SystemOverview() {
-  const { t } = useLanguage();
   const [stats, setStats] = useState({
     totalResources: 0,
     activeResources: 0,
@@ -43,8 +43,12 @@ function SystemOverview() {
       websocket.close();
     }
 
-    // 创建新的WebSocket连接
-    const wsUrl = `ws://localhost:8000/api/ws/progress/${taskId}`;
+    // 创建新的WebSocket连接 - 使用动态URL
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.hostname;
+    const port = '8000'; // 后端端口
+    const wsUrl = `${protocol}//${host}:${port}/api/ws/progress/${taskId}`;
+    console.log('连接WebSocket:', wsUrl);
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
@@ -389,6 +393,36 @@ function ResourceManagement() {
 
 // 智能体工具说明组件
 function AgentToolsInfo() {
+  const [testQuery, setTestQuery] = useState('');
+  const [testResult, setTestResult] = useState<any>(null);
+  const [testing, setTesting] = useState(false);
+
+  // 测试资源发现功能
+  const testResourceDiscovery = async () => {
+    if (!testQuery.trim()) {
+      toast.error('请输入测试查询');
+      return;
+    }
+
+    setTesting(true);
+    try {
+      const response = await resourceDiscoveryApi.testResourceMatching({
+        query: testQuery.trim(),
+        top_k: 5,
+        min_confidence: 0.1
+      });
+
+      setTestResult(response);
+      toast.success(`找到 ${response.total_matches} 个匹配结果`);
+    } catch (error) {
+      console.error('测试失败:', error);
+      toast.error(error instanceof Error ? error.message : '测试失败');
+      setTestResult(null);
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -437,6 +471,98 @@ function AgentToolsInfo() {
               智能体会自动调用这些工具来找到最合适的资源。
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 测试功能 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <TestTube className="h-4 w-4" />
+            测试资源发现
+          </CardTitle>
+          <CardDescription>
+            测试智能体的资源发现功能
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="输入测试查询，例如：查询数据库中的用户信息"
+              value={testQuery}
+              onChange={(e) => setTestQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && testResourceDiscovery()}
+            />
+            <Button
+              onClick={testResourceDiscovery}
+              disabled={testing || !testQuery.trim()}
+              size="sm"
+            >
+              {testing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  测试中
+                </>
+              ) : (
+                <>
+                  <Search className="h-4 w-4 mr-2" />
+                  测试
+                </>
+              )}
+            </Button>
+          </div>
+
+          {/* 测试结果 */}
+          {testResult && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4 text-sm">
+                <Badge variant="outline">
+                  {testResult.total_matches} 个匹配
+                </Badge>
+                <span className="text-muted-foreground">
+                  处理时间: {testResult.processing_time.toFixed(3)}s
+                </span>
+              </div>
+
+              {testResult.matches.length > 0 ? (
+                <div className="space-y-2">
+                  {testResult.matches.slice(0, 3).map((match: any, index: number) => (
+                    <div key={match.resource_id} className="border rounded p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">#{index + 1}</span>
+                        <span className="font-medium">{match.resource_name}</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {match.resource_type}
+                        </Badge>
+                        <Badge
+                          variant={match.confidence === 'high' ? 'default' : 'outline'}
+                          className="text-xs"
+                        >
+                          {(match.confidence_score * 100).toFixed(0)}%
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {match.description}
+                      </p>
+                    </div>
+                  ))}
+
+                  {testResult.matches.length > 3 && (
+                    <p className="text-sm text-muted-foreground text-center">
+                      还有 {testResult.matches.length - 3} 个结果...
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    未找到匹配的资源，请尝试其他查询或降低置信度阈值。
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

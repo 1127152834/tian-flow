@@ -86,7 +86,7 @@
     },
     "caseStudies": {
       "title": "案例研究",
-      "description": "通过回放查看 DeerFlow 的实际应用。",
+      "description": "通过回放查看 Olight 的实际应用。",
       "clickToWatch": "点击观看回放"
     },
     "footer": {
@@ -98,7 +98,7 @@
   "chat": {
     "welcome": {
       "greeting": "👋 您好！",
-      "description": "欢迎使用 💡 Olight，这是一个基于前沿语言模型构建的深度研究助手，帮助您在网络上搜索、浏览信息并处理复杂任务。"
+      "description": "欢迎使用 💡 Olight，这是一个基于前沿语言模型构建的深度研究助手，帮助您进行数据查询、浏览信息并处理复杂任务。"
     },
     "input": {
       "placeholder": "问我任何问题...",
@@ -119,29 +119,29 @@
       "description": "为您的研究报告选择写作风格。每种风格都针对不同的受众和目的进行了优化。",
       "currentStyle": "写作风格：{style}",
       "tooltip": "为您的研究报告选择写作风格。不同的风格针对不同的受众和目的进行了优化。",
-      "academic": {
-        "label": "学术",
-        "description": "正式、客观、分析性，使用精确术语"
+      "technicalReport": {
+        "label": "技术报告",
+        "description": "数据驱动、图表丰富、技术术语准确"
       },
-      "popularScience": {
-        "label": "科普",
-        "description": "引人入胜，面向大众读者"
+      "operationManual": {
+        "label": "操作手册",
+        "description": "步骤清晰、图文并茂、易于执行"
       },
-      "news": {
-        "label": "新闻",
-        "description": "事实性、简洁、公正的新闻风格"
+      "qualityDocumentation": {
+        "label": "质量文档",
+        "description": "严格规范、可追溯、符合标准"
       },
-      "socialMedia": {
-        "label": "社交媒体",
-        "description": "简洁、吸引眼球、易于分享"
+      "businessReport": {
+        "label": "商务报告",
+        "description": "数据可视化、决策导向、高管友好"
       }
     }
   },
   "settings": {
     "title": "设置",
     "dialog": {
-      "title": "DeerFlow 设置",
-      "description": "在这里管理您的 DeerFlow 设置。",
+      "title": "Olight 设置",
+      "description": "在这里管理您的 Olight 设置。",
       "cancel": "取消",
       "save": "保存"
     },
@@ -275,7 +275,7 @@
     },
     "mcp": {
       "title": "MCP 服务器",
-      "description": "模型上下文协议通过集成外部工具来增强 DeerFlow，用于私有域搜索、网页浏览、订餐等任务。点击这里",
+      "description": "模型上下文协议通过集成外部工具来增强 Olight，用于私有域搜索、网页浏览、订餐等任务。点击这里",
       "learnMore": "了解更多关于 MCP 的信息。",
       "actions": {
         "enableDisable": "启用/禁用服务器",

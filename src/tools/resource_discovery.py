@@ -1,7 +1,7 @@
 """
 资源发现工具
 
-为 DeerFlow Agent 提供智能资源发现和匹配功能
+为 Olight Agent 提供智能资源发现和匹配功能
 """
 
 import logging

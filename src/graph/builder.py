@@ -4,12 +4,6 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from src.prompts.planner_model import StepType
-from src.config.database import get_database_config
-import logging
-import psycopg2
-from typing import Optional
-
-logger = logging.getLogger(__name__)
 
 from .types import State
 from .nodes import (
@@ -60,82 +54,16 @@ def _build_base_graph():
         continue_to_running_research_team,
         ["planner", "researcher", "coder"],
     )
-
     builder.add_edge("reporter", END)
     builder.add_edge("data_analyst", END)
     return builder
 
 
-class PostgreSQLCheckpointer:
-    """PostgreSQL-based checkpointer for LangGraph state persistence"""
-
-    def __init__(self):
-        self.db_config = get_database_config()
-        self._ensure_checkpoint_table()
-
-    def _get_connection(self):
-        """Get database connection"""
-        return psycopg2.connect(
-            host=self.db_config["host"],
-            port=self.db_config["port"],
-            database=self.db_config["database"],
-            user=self.db_config["user"],
-            password=self.db_config["password"]
-        )
-
-    def _ensure_checkpoint_table(self):
-        """Ensure checkpoint table exists"""
-        try:
-            with self._get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("""
-                        CREATE SCHEMA IF NOT EXISTS langgraph;
-
-                        CREATE TABLE IF NOT EXISTS langgraph.checkpoints (
-                            thread_id TEXT NOT NULL,
-                            checkpoint_id TEXT NOT NULL,
-                            parent_checkpoint_id TEXT,
-                            checkpoint_data JSONB NOT NULL,
-                            metadata JSONB DEFAULT '{}',
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            PRIMARY KEY (thread_id, checkpoint_id)
-                        );
-
-                        CREATE INDEX IF NOT EXISTS idx_checkpoints_thread_id
-                        ON langgraph.checkpoints(thread_id);
-
-                        CREATE INDEX IF NOT EXISTS idx_checkpoints_created_at
-                        ON langgraph.checkpoints(created_at);
-                    """)
-                    conn.commit()
-                    logger.info("✅ PostgreSQL checkpoint table initialized")
-        except Exception as e:
-            logger.warning(f"Failed to initialize checkpoint table: {e}")
-            logger.info("Falling back to MemorySaver")
-
-
-def _create_checkpointer() -> Optional[object]:
-    """Create appropriate checkpointer based on configuration"""
-    try:
-        # Try to create PostgreSQL checkpointer
-        pg_checkpointer = PostgreSQLCheckpointer()
-        logger.info("✅ Using PostgreSQL checkpointer for persistent memory")
-
-        # For now, return MemorySaver as LangGraph's built-in checkpointer
-        # In a full implementation, we would create a custom checkpointer class
-        # that implements LangGraph's checkpointer interface
-        return MemorySaver()
-
-    except Exception as e:
-        logger.warning(f"Failed to create PostgreSQL checkpointer: {e}")
-        logger.info("Falling back to MemorySaver")
-        return MemorySaver()
-
-
 def build_graph_with_memory():
     """Build and return the agent workflow graph with memory."""
-    # Use PostgreSQL-compatible persistent memory to save conversation history
-    memory = _create_checkpointer()
+    # use persistent memory to save conversation history
+    # TODO: be compatible with SQLite / PostgreSQL
+    memory = MemorySaver()
 
     # build state graph
     builder = _build_base_graph()

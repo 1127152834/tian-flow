@@ -10,6 +10,7 @@ Text2SQL工具
 import json
 import logging
 import asyncio
+import pandas as pd
 from typing import Dict, Any, Optional, List, Annotated
 from datetime import datetime
 
@@ -18,6 +19,7 @@ from src.database import get_db_session
 from src.tools.decorators import log_io
 from src.services.text2sql import Text2SQLService
 from src.models.text2sql import SQLGenerationRequest, SQLExecutionRequest
+from src.services.websocket.progress_manager import progress_ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,125 @@ class ToolResult:
             "metadata": self.metadata,
             "timestamp": self.timestamp
         }, ensure_ascii=False, indent=2)
+
+
+def _auto_generate_chart_config(data: List[Dict], title: str = "查询结果图表") -> Optional[Dict]:
+    """
+    根据查询结果数据自动生成图表配置
+
+    Args:
+        data: 查询结果数据列表
+        title: 图表标题
+
+    Returns:
+        图表配置字典，如果不适合生成图表则返回None
+    """
+    if not data or len(data) < 2:
+        return None
+
+    try:
+        df = pd.DataFrame(data)
+
+        # 检测数值列和分类列
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+
+        # 如果没有数值列，不生成图表
+        if not numeric_cols:
+            return None
+
+        # 检测时间相关列
+        time_cols = [col for col in df.columns if any(keyword in col.lower()
+                    for keyword in ['time', 'date', '时间', '日期', 'created', 'updated', 'year', 'month', 'day'])]
+
+        # 根据数据特征选择合适的图表类型
+        chart_config = None
+
+        # 情况1：有时间列 -> 折线图（时间序列）
+        if time_cols and len(numeric_cols) >= 1:
+            chart_config = {
+                "type": "LineChart",
+                "title": title,
+                "width": 800,
+                "height": 400,
+                "data": data,
+                "xAxis": {"dataKey": time_cols[0], "type": "category"},
+                "yAxis": {"type": "number"},
+                "lines": [{
+                    "dataKey": numeric_cols[0],
+                    "stroke": "#8884d8",
+                    "type": "monotone",
+                    "strokeWidth": 2
+                }],
+                "tooltip": {"active": True},
+                "legend": True
+            }
+
+        # 情况2：有分类列和数值列 -> 柱状图
+        elif categorical_cols and numeric_cols:
+            chart_config = {
+                "type": "BarChart",
+                "title": title,
+                "width": 800,
+                "height": 400,
+                "data": data,
+                "xAxis": {"dataKey": categorical_cols[0], "type": "category"},
+                "yAxis": {"type": "number"},
+                "bars": [{"dataKey": numeric_cols[0], "fill": "#8884d8"}],
+                "tooltip": {"active": True},
+                "legend": True
+            }
+
+        # 情况3：只有数值数据，数据量适中 -> 带索引的柱状图
+        elif len(numeric_cols) >= 1 and len(df) <= 50:
+            # 为数据添加序号索引
+            data_with_index = []
+            for i, row in enumerate(data):
+                row_with_index = {"序号": f"第{i+1}项", **row}
+                data_with_index.append(row_with_index)
+
+            chart_config = {
+                "type": "BarChart",
+                "title": title,
+                "width": 800,
+                "height": 400,
+                "data": data_with_index,
+                "xAxis": {"dataKey": "序号", "type": "category"},
+                "yAxis": {"type": "number"},
+                "bars": [{"dataKey": numeric_cols[0], "fill": "#8884d8"}],
+                "tooltip": {"active": True},
+                "legend": True
+            }
+
+        # 情况4：如果有两个数值列，可以考虑散点图
+        elif len(numeric_cols) >= 2 and len(df) <= 100:
+            chart_config = {
+                "type": "ScatterChart",
+                "title": title,
+                "width": 800,
+                "height": 400,
+                "data": data,
+                "xAxis": {"dataKey": numeric_cols[0], "type": "number", "name": numeric_cols[0]},
+                "yAxis": {"dataKey": numeric_cols[1], "type": "number", "name": numeric_cols[1]},
+                "scatter": {"dataKey": numeric_cols[1], "fill": "#8884d8"},
+                "tooltip": {"active": True},
+                "legend": True
+            }
+
+        return chart_config
+
+    except Exception as e:
+        logger.warning(f"自动图表生成失败: {e}")
+        return None
+
+
+async def _push_chart_async(chart_config: Dict, thread_id: str = None):
+    """异步推送图表到前端"""
+    try:
+        await progress_ws_manager.send_chart_data(chart_config, thread_id)
+        logger.info(f"图表已异步推送: {chart_config.get('title', 'Unknown')}")
+    except Exception as e:
+        logger.error(f"异步图表推送失败: {e}")
 
 
 @tool
@@ -282,6 +403,119 @@ def generate_sql_only(
 
 @tool
 @log_io
+def smart_text2sql_query(
+    question: Annotated[str, "自然语言问题"],
+    database_id: Annotated[Optional[int], "数据库ID，不指定则使用默认数据库"] = None,
+    auto_chart: Annotated[bool, "是否自动生成图表"] = True,
+    chart_title: Annotated[str, "图表标题"] = ""
+) -> str:
+    """
+    智能Text2SQL查询工具 - 支持自动图表生成
+
+    将自然语言问题转换为SQL查询并执行，如果结果适合可视化，会自动生成图表并推送到前端。
+    图表生成是异步的，不会阻塞查询结果返回，确保快速响应用户。
+    """
+    try:
+        logger.info(f"🧠 智能Text2SQL查询: {question[:100]}...")
+
+        # 使用Text2SQL服务
+        text2sql_service = Text2SQLService()
+
+        # 创建SQL生成请求
+        request = SQLGenerationRequest(
+            question=question,
+            datasource_id=database_id or 1,
+            include_explanation=True
+        )
+
+        # 生成SQL
+        generation_result = asyncio.run(text2sql_service.generate_sql(request))
+
+        generated_sql = generation_result.generated_sql
+        confidence = generation_result.confidence_score
+        explanation = generation_result.explanation or f"基于问题'{question}'生成的SQL查询"
+
+        # 执行SQL
+        execution_request = SQLExecutionRequest(
+            query_id=generation_result.query_id
+        )
+
+        execution_result = asyncio.run(text2sql_service.execute_sql(execution_request))
+
+        if execution_result.status.value == "success":
+            results = execution_result.result_data or []
+            row_count = execution_result.result_rows or 0
+        else:
+            results = []
+            row_count = 0
+
+        # 构建基本响应数据
+        response_data = {
+            "sql": generated_sql,
+            "confidence": confidence,
+            "explanation": explanation,
+            "results": results[:10] if results else [],  # 只返回前10行给智能体查看
+            "total_rows": row_count,
+            "columns": list(results[0].keys()) if results else []
+        }
+
+        # 构建响应消息
+        if row_count == 0:
+            message = f"查询执行成功，但没有返回数据。生成的SQL: {generated_sql}"
+        elif row_count <= 10:
+            message = f"查询成功！返回 {row_count} 行数据"
+        else:
+            message = f"查询成功！返回 {row_count} 行数据（显示前10行）"
+
+        # 异步图表生成（不阻塞响应）
+        if auto_chart and results and row_count >= 2:
+            # 确定图表标题
+            final_chart_title = chart_title or f"查询结果: {question[:30]}..."
+
+            # 生成图表配置
+            chart_config = _auto_generate_chart_config(results, final_chart_title)
+
+            if chart_config:
+                # 异步推送图表（不等待完成）
+                asyncio.create_task(_push_chart_async(chart_config))
+
+                message += f"，{chart_config['type']}图表正在生成中..."
+                response_data["chart_info"] = {
+                    "type": chart_config["type"],
+                    "status": "generating",
+                    "title": final_chart_title
+                }
+            else:
+                message += "（数据不适合图表展示）"
+                response_data["chart_info"] = {"status": "not_suitable"}
+        elif auto_chart:
+            response_data["chart_info"] = {"status": "disabled", "reason": "数据量不足"}
+
+        return ToolResult(
+            success=True,
+            message=message,
+            data=response_data,
+            metadata={
+                "question": question,
+                "database_id": database_id,
+                "execution_time": execution_result.execution_time if hasattr(execution_result, 'execution_time') else "0.05s",
+                "auto_chart": auto_chart,
+                "query_id": generation_result.query_id
+            }
+        ).to_json()
+
+    except Exception as e:
+        logger.error(f"❌ 智能Text2SQL查询异常: {e}")
+        return ToolResult(
+            success=False,
+            message="智能Text2SQL查询过程中发生异常",
+            error=str(e),
+            metadata={"question": question, "database_id": database_id}
+        ).to_json()
+
+
+@tool
+@log_io
 def get_training_examples(
     keyword: Annotated[Optional[str], "关键词过滤"] = None,
     limit: Annotated[int, "返回数量限制"] = 10
@@ -299,31 +533,49 @@ def get_training_examples(
         try:
             from sqlalchemy import text
             
-            # 构建查询
+            # 构建查询 - 包含 datasource_id 字段，确保获取所有数据源的示例
             if keyword:
                 query = text("""
-                    SELECT question, content, sql_query 
-                    FROM text2sql.vanna_embeddings 
-                    WHERE question ILIKE :keyword OR content ILIKE :keyword
-                    ORDER BY created_at DESC
-                    LIMIT :limit
+                    WITH ranked_examples AS (
+                        SELECT datasource_id, question, content, sql_query, content_type, table_name,
+                               ROW_NUMBER() OVER (PARTITION BY datasource_id ORDER BY created_at DESC) as rn
+                        FROM text2sql.vanna_embeddings
+                        WHERE question ILIKE :keyword OR content ILIKE :keyword
+                    )
+                    SELECT datasource_id, question, content, sql_query, content_type, table_name
+                    FROM ranked_examples
+                    WHERE rn <= :per_datasource_limit
+                    ORDER BY datasource_id, rn
                 """)
-                result = session.execute(query, {"keyword": f"%{keyword}%", "limit": limit})
+                # 每个数据源最多返回 limit/3 个示例，确保多样性，至少 5 个
+                per_datasource_limit = max(5, limit // 3)
+                result = session.execute(query, {"keyword": f"%{keyword}%", "per_datasource_limit": per_datasource_limit})
             else:
                 query = text("""
-                    SELECT question, content, sql_query 
-                    FROM text2sql.vanna_embeddings 
-                    ORDER BY created_at DESC
+                    WITH ranked_examples AS (
+                        SELECT datasource_id, question, content, sql_query, content_type, table_name,
+                               ROW_NUMBER() OVER (PARTITION BY datasource_id ORDER BY created_at DESC) as rn
+                        FROM text2sql.vanna_embeddings
+                    )
+                    SELECT datasource_id, question, content, sql_query, content_type, table_name
+                    FROM ranked_examples
+                    WHERE rn <= :per_datasource_limit
+                    ORDER BY datasource_id, rn
                     LIMIT :limit
                 """)
-                result = session.execute(query, {"limit": limit})
-            
+                # 每个数据源最多返回 limit/3 个示例，确保多样性，至少 5 个
+                per_datasource_limit = max(5, limit // 3)
+                result = session.execute(query, {"per_datasource_limit": per_datasource_limit, "limit": limit})
+
             examples = []
             for row in result.fetchall():
                 example = {
+                    "datasource_id": row.datasource_id,
                     "question": row.question,
                     "content": row.content,
-                    "sql_query": row.sql_query
+                    "sql_query": row.sql_query,
+                    "content_type": row.content_type,
+                    "table_name": row.table_name
                 }
                 examples.append(example)
             

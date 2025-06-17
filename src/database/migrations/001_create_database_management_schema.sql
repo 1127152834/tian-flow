@@ -7,10 +7,10 @@
 -- Create database_management schema
 CREATE SCHEMA IF NOT EXISTS database_management;
 
--- Create database_datasources table (simplified for deer-flow)
+-- Create database_datasources table (safe creation - no data loss)
 CREATE TABLE IF NOT EXISTS database_management.database_datasources (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(256) NOT NULL UNIQUE,
+    name VARCHAR(256) NOT NULL,
     description TEXT,
     database_type VARCHAR(50) NOT NULL CHECK (database_type IN ('MYSQL', 'POSTGRESQL')),
     host VARCHAR(256) NOT NULL,
@@ -19,14 +19,17 @@ CREATE TABLE IF NOT EXISTS database_management.database_datasources (
     username VARCHAR(256) NOT NULL,
     password VARCHAR(512) NOT NULL,
     readonly_mode BOOLEAN NOT NULL DEFAULT TRUE,
-    allowed_operations JSONB NOT NULL DEFAULT '["SELECT"]',
+    allowed_operations TEXT[] NOT NULL DEFAULT ARRAY['SELECT'],
     connection_status VARCHAR(50) NOT NULL DEFAULT 'DISCONNECTED'
         CHECK (connection_status IN ('CONNECTED', 'DISCONNECTED', 'ERROR', 'TESTING')),
     connection_error TEXT,
     last_tested_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMP WITH TIME ZONE
+    deleted_at TIMESTAMP WITH TIME ZONE,
+
+    -- Add unique constraint on name for non-deleted records
+    CONSTRAINT unique_active_datasource_name UNIQUE (name) DEFERRABLE INITIALLY DEFERRED
 );
 
 -- Create indexes for better performance
@@ -90,9 +93,10 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Create trigger to automatically update updated_at
-CREATE TRIGGER update_database_datasources_updated_at 
-    BEFORE UPDATE ON database_management.database_datasources 
+-- Create trigger to automatically update updated_at (if not exists)
+DROP TRIGGER IF EXISTS update_database_datasources_updated_at ON database_management.database_datasources;
+CREATE TRIGGER update_database_datasources_updated_at
+    BEFORE UPDATE ON database_management.database_datasources
     FOR EACH ROW EXECUTE FUNCTION database_management.update_updated_at_column();
 
 -- Insert some sample data for testing (optional)

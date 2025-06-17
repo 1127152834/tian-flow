@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text2SQL Frontend Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .header {
+            border-bottom: 1px solid #e5e5e5;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin: 0 0 8px 0;
+        }
+        .subtitle {
+            color: #666;
+            margin: 0;
+        }
+        .test-section {
+            margin-bottom: 32px;
+        }
+        .test-title {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: #333;
+        }
+        .api-test {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .api-url {
+            font-family: 'Monaco', 'Menlo', monospace;
+            background: #e9ecef;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 8px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .test-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .result.loading {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .json-output {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 12px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 8px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-indicator.online {
+            background: #28a745;
+        }
+        .status-indicator.offline {
+            background: #dc3545;
+        }
+        .status-indicator.unknown {
+            background: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">🦌 DeerFlow Text2SQL Frontend Test</h1>
+            <p class="subtitle">Test the Text2SQL API endpoints and frontend integration</p>
+        </div>
+
+        <!-- Service Status -->
+        <div class="test-section">
+            <h2 class="test-title">Service Status</h2>
+            <div class="api-test">
+                <div class="api-url">GET /api/text2sql/health</div>
+                <button class="test-button" onclick="testHealth()">Check Health</button>
+                <div id="health-result"></div>
+            </div>
+        </div>
+
+        <!-- Database Datasources -->
+        <div class="test-section">
+            <h2 class="test-title">Database Datasources</h2>
+            <div class="api-test">
+                <div class="api-url">GET /api/database-datasources</div>
+                <button class="test-button" onclick="testDatasources()">Load Datasources</button>
+                <div id="datasources-result"></div>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="test-section">
+            <h2 class="test-title">Text2SQL Statistics</h2>
+            <div class="api-test">
+                <div class="api-url">GET /api/text2sql/statistics</div>
+                <button class="test-button" onclick="testStatistics()">Get Statistics</button>
+                <div id="statistics-result"></div>
+            </div>
+        </div>
+
+        <!-- SQL Generation -->
+        <div class="test-section">
+            <h2 class="test-title">SQL Generation</h2>
+            <div class="api-test">
+                <div class="api-url">POST /api/text2sql/generate</div>
+                <button class="test-button" onclick="testSQLGeneration()">Generate SQL</button>
+                <div id="generation-result"></div>
+            </div>
+        </div>
+
+        <!-- Training Data -->
+        <div class="test-section">
+            <h2 class="test-title">Training Data</h2>
+            <div class="api-test">
+                <div class="api-url">GET /api/text2sql/training</div>
+                <button class="test-button" onclick="testTrainingData()">Get Training Data</button>
+                <div id="training-result"></div>
+            </div>
+        </div>
+
+        <!-- WebSocket Test -->
+        <div class="test-section">
+            <h2 class="test-title">WebSocket Connection</h2>
+            <div class="api-test">
+                <div class="api-url">WS /api/text2sql/ws/1</div>
+                <button class="test-button" onclick="testWebSocket()">Connect WebSocket</button>
+                <button class="test-button" onclick="disconnectWebSocket()">Disconnect</button>
+                <div id="websocket-result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let websocket = null;
+
+        function showResult(elementId, type, message, data = null) {
+            const element = document.getElementById(elementId);
+            element.className = `result ${type}`;
+            element.innerHTML = message;
+            
+            if (data) {
+                const jsonDiv = document.createElement('div');
+                jsonDiv.className = 'json-output';
+                jsonDiv.textContent = JSON.stringify(data, null, 2);
+                element.appendChild(jsonDiv);
+            }
+        }
+
+        async function testHealth() {
+            showResult('health-result', 'loading', '🔄 Checking service health...');
+            
+            try {
+                const response = await fetch('/api/text2sql/health');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('health-result', 'success', '✅ Service is healthy', data);
+                } else {
+                    showResult('health-result', 'error', '❌ Service health check failed', data);
+                }
+            } catch (error) {
+                showResult('health-result', 'error', `❌ Error: ${error.message}`);
+            }
+        }
+
+        async function testDatasources() {
+            showResult('datasources-result', 'loading', '🔄 Loading datasources...');
+            
+            try {
+                const response = await fetch('/api/database-datasources');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const count = data.datasources ? data.datasources.length : 0;
+                    showResult('datasources-result', 'success', `✅ Found ${count} datasources`, data);
+                } else {
+                    showResult('datasources-result', 'error', '❌ Failed to load datasources', data);
+                }
+            } catch (error) {
+                showResult('datasources-result', 'error', `❌ Error: ${error.message}`);
+            }
+        }
+
+        async function testStatistics() {
+            showResult('statistics-result', 'loading', '🔄 Loading statistics...');
+            
+            try {
+                const response = await fetch('/api/text2sql/statistics');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('statistics-result', 'success', '✅ Statistics loaded successfully', data);
+                } else {
+                    showResult('statistics-result', 'error', '❌ Failed to load statistics', data);
+                }
+            } catch (error) {
+                showResult('statistics-result', 'error', `❌ Error: ${error.message}`);
+            }
+        }
+
+        async function testSQLGeneration() {
+            showResult('generation-result', 'loading', '🔄 Generating SQL...');
+            
+            try {
+                const response = await fetch('/api/text2sql/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        datasource_id: 1,
+                        question: "Show me all active users",
+                        include_explanation: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('generation-result', 'success', '✅ SQL generated successfully', data);
+                } else {
+                    showResult('generation-result', 'error', '❌ Failed to generate SQL', data);
+                }
+            } catch (error) {
+                showResult('generation-result', 'error', `❌ Error: ${error.message}`);
+            }
+        }
+
+        async function testTrainingData() {
+            showResult('training-result', 'loading', '🔄 Loading training data...');
+            
+            try {
+                const response = await fetch('/api/text2sql/training?limit=10');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const count = data.training_data ? data.training_data.length : 0;
+                    showResult('training-result', 'success', `✅ Found ${count} training data records`, data);
+                } else {
+                    showResult('training-result', 'error', '❌ Failed to load training data', data);
+                }
+            } catch (error) {
+                showResult('training-result', 'error', `❌ Error: ${error.message}`);
+            }
+        }
+
+        function testWebSocket() {
+            if (websocket) {
+                showResult('websocket-result', 'error', '❌ WebSocket already connected');
+                return;
+            }
+
+            showResult('websocket-result', 'loading', '🔄 Connecting to WebSocket...');
+            
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/api/text2sql/ws/1`;
+                
+                websocket = new WebSocket(wsUrl);
+                
+                websocket.onopen = () => {
+                    showResult('websocket-result', 'success', '✅ WebSocket connected successfully');
+                };
+                
+                websocket.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    const currentResult = document.getElementById('websocket-result');
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = 'json-output';
+                    messageDiv.textContent = `📨 ${new Date().toLocaleTimeString()}: ${JSON.stringify(message, null, 2)}`;
+                    currentResult.appendChild(messageDiv);
+                };
+                
+                websocket.onclose = () => {
+                    showResult('websocket-result', 'error', '❌ WebSocket disconnected');
+                    websocket = null;
+                };
+                
+                websocket.onerror = (error) => {
+                    showResult('websocket-result', 'error', `❌ WebSocket error: ${error}`);
+                    websocket = null;
+                };
+                
+            } catch (error) {
+                showResult('websocket-result', 'error', `❌ Error: ${error.message}`);
+            }
+        }
+
+        function disconnectWebSocket() {
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+                showResult('websocket-result', 'success', '✅ WebSocket disconnected');
+            } else {
+                showResult('websocket-result', 'error', '❌ No WebSocket connection to disconnect');
+            }
+        }
+
+        // Auto-test health on page load
+        window.addEventListener('load', () => {
+            testHealth();
+        });
+    </script>
+</body>
+</html>

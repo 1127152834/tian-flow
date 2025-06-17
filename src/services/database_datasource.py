@@ -76,48 +76,11 @@ class DatabaseDatasourceService:
     
     async def get_datasource(self, datasource_id: int) -> Optional[DatabaseDatasource]:
         """Get datasource by ID"""
-        datasource = self._datasources_cache.get(datasource_id)
-        if datasource and datasource.deleted_at is None:
-            return datasource
-        return None
+        return await self.repository.get_datasource(datasource_id)
     
     async def create_datasource(self, request: DatabaseDatasourceCreate) -> DatabaseDatasource:
         """Create new datasource"""
-        # Check for name conflicts
-        existing = [
-            ds for ds in self._datasources_cache.values()
-            if ds.name == request.name and ds.deleted_at is None
-        ]
-        if existing:
-            raise ValueError(f"Datasource name '{request.name}' already exists")
-        
-        # Create new datasource
-        now = datetime.now(timezone.utc)
-        datasource = DatabaseDatasource(
-            id=self._next_id,
-            name=request.name,
-            description=request.description,
-            database_type=request.database_type,
-            host=request.host,
-            port=request.port,
-            database_name=request.database_name,
-            username=request.username,
-            password=request.password,
-            readonly_mode=request.readonly_mode,
-            allowed_operations=request.allowed_operations or ["SELECT"],
-            connection_status=ConnectionStatus.DISCONNECTED,
-            created_at=now,
-            updated_at=now,
-        )
-        
-        self._datasources_cache[self._next_id] = datasource
-        self._next_id += 1
-        
-        # Save to config file
-        self._save_datasources()
-        
-        logger.info(f"Created datasource: {datasource.name} (ID: {datasource.id})")
-        return datasource
+        return await self.repository.create_datasource(request)
 
     async def update_datasource(
         self,
@@ -125,45 +88,11 @@ class DatabaseDatasourceService:
         request: DatabaseDatasourceUpdate
     ) -> Optional[DatabaseDatasource]:
         """Update existing datasource"""
-        datasource = await self.get_datasource(datasource_id)
-        if not datasource:
-            return None
-
-        # Check for name conflicts if name is being changed
-        if request.name and request.name != datasource.name:
-            existing = [
-                ds for ds in self._datasources_cache.values()
-                if ds.name == request.name and ds.deleted_at is None and ds.id != datasource_id
-            ]
-            if existing:
-                raise ValueError(f"Datasource name '{request.name}' already exists")
-
-        # Update fields
-        update_data = request.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            setattr(datasource, field, value)
-
-        datasource.updated_at = datetime.now(timezone.utc)
-
-        # Save to config file
-        self._save_datasources()
-
-        logger.info(f"Updated datasource: {datasource.name} (ID: {datasource.id})")
-        return datasource
+        return await self.repository.update_datasource(datasource_id, request)
 
     async def delete_datasource(self, datasource_id: int) -> bool:
         """Delete datasource (soft delete)"""
-        datasource = await self.get_datasource(datasource_id)
-        if not datasource:
-            return False
-
-        datasource.deleted_at = datetime.now(timezone.utc)
-
-        # Save to config file
-        self._save_datasources()
-
-        logger.info(f"Deleted datasource: {datasource.name} (ID: {datasource.id})")
-        return True
+        return await self.repository.delete_datasource(datasource_id)
 
     async def test_connection(
         self,
@@ -388,6 +317,205 @@ class DatabaseDatasourceService:
             connection.close()
 
         return tables
+
+    async def get_database_connection(self, datasource_id: int):
+        """Get database connection for a datasource"""
+        datasource = await self.get_datasource(datasource_id)
+        if not datasource:
+            raise ValueError(f"Datasource {datasource_id} not found")
+
+        if datasource.database_type == DatabaseType.MYSQL:
+            return pymysql.connect(
+                host=datasource.host,
+                port=datasource.port,
+                user=datasource.username,
+                password=datasource.password,
+                database=datasource.database_name,
+            )
+        elif datasource.database_type == DatabaseType.POSTGRESQL:
+            return psycopg2.connect(
+                host=datasource.host,
+                port=datasource.port,
+                user=datasource.username,
+                password=datasource.password,
+                database=datasource.database_name,
+            )
+        else:
+            raise ValueError(f"Unsupported database type: {datasource.database_type}")
+
+    async def extract_ddl_statements(self, datasource_id: int, database_name: Optional[str] = None) -> List[str]:
+        """Extract DDL statements from database"""
+        datasource = await self.get_datasource(datasource_id)
+        if not datasource:
+            raise ValueError(f"Datasource {datasource_id} not found")
+
+        try:
+            if datasource.database_type == DatabaseType.MYSQL:
+                return await asyncio.to_thread(self._extract_mysql_ddl, datasource, database_name)
+            elif datasource.database_type == DatabaseType.POSTGRESQL:
+                return await asyncio.to_thread(self._extract_postgresql_ddl, datasource, database_name)
+            else:
+                raise ValueError(f"Unsupported database type: {datasource.database_type}")
+        except Exception as e:
+            logger.error(f"Failed to extract DDL from datasource {datasource_id}: {e}")
+            raise
+
+    def _extract_mysql_ddl(self, datasource: DatabaseDatasource, database_name: Optional[str] = None) -> List[str]:
+        """Extract DDL statements from MySQL database"""
+        connection = pymysql.connect(
+            host=datasource.host,
+            port=datasource.port,
+            user=datasource.username,
+            password=datasource.password,
+            database=database_name or datasource.database_name,
+        )
+
+        ddl_statements = []
+        try:
+            with connection.cursor() as cursor:
+                # Get all databases accessible to this user (excluding system databases)
+                cursor.execute("""
+                    SHOW DATABASES
+                """)
+                databases = [row[0] for row in cursor.fetchall()
+                           if row[0] not in ('information_schema', 'performance_schema', 'mysql', 'sys')]
+
+                # If specific database is requested, only use that one
+                if database_name:
+                    databases = [db for db in databases if db == database_name]
+                else:
+                    # Use the connected database
+                    databases = [datasource.database_name]
+
+                for db_name in databases:
+                    # Switch to the database
+                    cursor.execute(f"USE `{db_name}`")
+
+                    # Get all table names in this database
+                    cursor.execute("SHOW TABLES")
+                    tables = [row[0] for row in cursor.fetchall()]
+
+                    # Add database creation statement if multiple databases
+                    if len(databases) > 1:
+                        ddl_statements.append(f"CREATE DATABASE IF NOT EXISTS `{db_name}`;")
+                        ddl_statements.append(f"USE `{db_name}`;")
+
+                    for table in tables:
+                        # Get CREATE TABLE statement
+                        cursor.execute(f"SHOW CREATE TABLE `{table}`")
+                        result = cursor.fetchone()
+                        if result:
+                            # Clean up the CREATE TABLE statement
+                            create_statement = result[1]
+                            # Add database prefix if multiple databases
+                            if len(databases) > 1:
+                                create_statement = create_statement.replace(
+                                    f"CREATE TABLE `{table}`",
+                                    f"CREATE TABLE `{db_name}`.`{table}`"
+                                )
+                            ddl_statements.append(create_statement)
+        finally:
+            connection.close()
+
+        return ddl_statements
+
+    def _extract_postgresql_ddl(self, datasource: DatabaseDatasource, database_name: Optional[str] = None) -> List[str]:
+        """Extract DDL statements from PostgreSQL database"""
+        connection = psycopg2.connect(
+            host=datasource.host,
+            port=datasource.port,
+            user=datasource.username,
+            password=datasource.password,
+            database=database_name or datasource.database_name,
+        )
+
+        ddl_statements = []
+        try:
+            with connection.cursor() as cursor:
+                # Get all tables from all schemas (excluding system schemas)
+                cursor.execute("""
+                    SELECT table_schema, table_name
+                    FROM information_schema.tables
+                    WHERE table_type = 'BASE TABLE'
+                    AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                    ORDER BY table_schema, table_name
+                """)
+                tables = cursor.fetchall()
+
+                for schema_name, table_name in tables:
+                    # Generate CREATE TABLE statement with schema
+                    cursor.execute("""
+                        SELECT
+                            'CREATE TABLE ' || %s || '.' || table_name || ' (' ||
+                            string_agg(
+                                column_name || ' ' ||
+                                CASE
+                                    WHEN data_type = 'character varying' THEN
+                                        CASE WHEN character_maximum_length IS NOT NULL
+                                             THEN 'VARCHAR(' || character_maximum_length || ')'
+                                             ELSE 'VARCHAR'
+                                        END
+                                    WHEN data_type = 'character' THEN
+                                        CASE WHEN character_maximum_length IS NOT NULL
+                                             THEN 'CHAR(' || character_maximum_length || ')'
+                                             ELSE 'CHAR'
+                                        END
+                                    WHEN data_type = 'numeric' THEN
+                                        CASE WHEN numeric_precision IS NOT NULL AND numeric_scale IS NOT NULL
+                                             THEN 'NUMERIC(' || numeric_precision || ',' || numeric_scale || ')'
+                                             ELSE 'NUMERIC'
+                                        END
+                                    WHEN data_type = 'integer' THEN 'INTEGER'
+                                    WHEN data_type = 'bigint' THEN 'BIGINT'
+                                    WHEN data_type = 'smallint' THEN 'SMALLINT'
+                                    WHEN data_type = 'boolean' THEN 'BOOLEAN'
+                                    WHEN data_type = 'text' THEN 'TEXT'
+                                    WHEN data_type = 'timestamp without time zone' THEN 'TIMESTAMP'
+                                    WHEN data_type = 'timestamp with time zone' THEN 'TIMESTAMPTZ'
+                                    WHEN data_type = 'date' THEN 'DATE'
+                                    WHEN data_type = 'time without time zone' THEN 'TIME'
+                                    WHEN data_type = 'uuid' THEN 'UUID'
+                                    WHEN data_type = 'json' THEN 'JSON'
+                                    WHEN data_type = 'jsonb' THEN 'JSONB'
+                                    WHEN data_type = 'ARRAY' THEN 'TEXT[]'
+                                    ELSE UPPER(data_type)
+                                END ||
+                                CASE WHEN is_nullable = 'NO' THEN ' NOT NULL' ELSE '' END ||
+                                CASE WHEN column_default IS NOT NULL THEN ' DEFAULT ' || column_default ELSE '' END,
+                                ', ' ORDER BY ordinal_position
+                            ) || ');' as ddl
+                        FROM information_schema.columns
+                        WHERE table_name = %s AND table_schema = %s
+                        GROUP BY table_name
+                    """, (schema_name, table_name, schema_name))
+
+                    result = cursor.fetchone()
+                    if result:
+                        ddl_statements.append(result[0])
+
+                # Also add schema creation statements
+                cursor.execute("""
+                    SELECT DISTINCT table_schema
+                    FROM information_schema.tables
+                    WHERE table_type = 'BASE TABLE'
+                    AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                    AND table_schema != 'public'
+                    ORDER BY table_schema
+                """)
+                schemas = cursor.fetchall()
+
+                # Prepend schema creation statements
+                schema_statements = []
+                for (schema_name,) in schemas:
+                    schema_statements.append(f"CREATE SCHEMA IF NOT EXISTS {schema_name};")
+
+                # Combine schema creation + table creation
+                ddl_statements = schema_statements + ddl_statements
+
+        finally:
+            connection.close()
+
+        return ddl_statements
 
 
 # Global service instance

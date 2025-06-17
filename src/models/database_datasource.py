@@ -19,7 +19,6 @@ class DatabaseType(str, Enum):
     """Database type enumeration (compatible with ti-flow)"""
     MYSQL = "MYSQL"
     POSTGRESQL = "POSTGRESQL"
-    TIDB = "TIDB"  # Added for ti-flow compatibility
 
 
 class ConnectionStatus(str, Enum):

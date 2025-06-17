@@ -79,3 +79,25 @@ def create_logged_tool(base_tool_class: Type[T]) -> Type[T]:
     # Set a more descriptive name for the class
     LoggedTool.__name__ = f"Logged{base_tool_class.__name__}"
     return LoggedTool
+
+
+def tool(func: Callable) -> Callable:
+    """
+    A simple tool decorator that marks a function as a tool.
+
+    Args:
+        func: The function to be marked as a tool
+
+    Returns:
+        The function with tool metadata
+    """
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    # Mark the function as a tool
+    wrapper.__tool__ = True
+    wrapper._tool_name = func.__name__
+    wrapper._tool_description = func.__doc__ or f"Tool: {func.__name__}"
+
+    return wrapper

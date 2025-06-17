@@ -18,3 +18,16 @@ BASIC_MODEL:
 #   base_url: https://ark-cn-beijing.bytedance.net/api/v3
 #   model: "doubao-1-5-thinking-pro-m-250428"
 #   api_key: xxxx
+
+# Embedding model configuration for Text2SQL
+BASE_EMBEDDING_MODEL:
+  api_key: sk-jabzylezvpqdzynvfkblblcqngioajfbebwtieblwuyxsgbj
+  base_url: https://api.siliconflow.cn/v1
+  model: BAAI/bge-m3
+  vector_dimension: 1024
+
+# Rerank model configuration for Text2SQL (optional)
+BASE_RERANK_MODEL:
+  api_key: sk-jabzylezvpqdzynvfkblblcqngioajfbebwtieblwuyxsgbj
+  base_url: https://api.siliconflow.cn/v1
+  model: BAAI/bge-reranker-v2-m3

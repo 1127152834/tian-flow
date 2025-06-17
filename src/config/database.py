@@ -16,8 +16,8 @@ from psycopg2.extras import RealDictCursor
 
 # Database configuration
 DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql+psycopg2://aolei:aolei123456@localhost:5432/aolei"
+    "DATABASE_URL",
+    "postgresql+psycopg2://aolei:aolei123456@localhost:5432/aolei_db"
 )
 
 # Create SQLAlchemy engine

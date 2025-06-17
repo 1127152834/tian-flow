@@ -71,6 +71,12 @@ from src.llms.llm import get_configured_llm_models
 from src.tools import VolcengineTTS
 from src.services.database_datasource import database_datasource_service
 from src.services.text2sql import Text2SQLService
+from src.server.routes.text2sql import router as text2sql_router
+from src.server.routes.api_tools import (
+    api_definition_router,
+    api_call_log_router,
+    curl_parser_router,
+)
 
 # Initialize Text2SQL service
 text2sql_service = Text2SQLService()
@@ -95,6 +101,16 @@ app.add_middleware(
 )
 
 graph = build_graph_with_memory()
+
+# Include routers
+app.include_router(text2sql_router)
+app.include_router(api_definition_router)
+app.include_router(api_call_log_router)
+app.include_router(curl_parser_router)
+
+# Resource Discovery router
+from src.api.resource_discovery import router as resource_discovery_router
+app.include_router(resource_discovery_router)
 
 
 @app.post("/api/chat/stream")

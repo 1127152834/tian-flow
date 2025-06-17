@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DDL训练组件测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .checkbox-group {
+            margin: 15px 0;
+        }
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+        }
+        .checkbox-item input {
+            margin-right: 8px;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 5px 0 0;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+            font-family: monospace;
+            resize: vertical;
+        }
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>DDL训练组件测试</h1>
+    
+    <div class="card">
+        <h2>自动提取模式</h2>
+        <div>
+            <label>数据库名称（可选）:</label>
+            <input type="text" id="databaseName" class="input" placeholder="留空则提取所有数据库">
+        </div>
+        
+        <div class="checkbox-group">
+            <h3>训练选项</h3>
+            <div class="checkbox-item">
+                <input type="checkbox" id="autoExtract" checked>
+                <label for="autoExtract">自动提取表结构</label>
+            </div>
+            <div class="checkbox-item">
+                <input type="checkbox" id="skipExisting" checked>
+                <label for="skipExisting">跳过已存在的数据</label>
+            </div>
+        </div>
+        
+        <button class="button" onclick="testAutoExtraction()">开始自动提取</button>
+    </div>
+    
+    <div class="card">
+        <h2>文件上传模式</h2>
+        <div>
+            <label>DDL内容:</label>
+            <textarea id="ddlContent" class="textarea" rows="8" placeholder="粘贴或编辑DDL语句...">-- 示例DDL
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    total_amount DECIMAL(10,2) NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);</textarea>
+        </div>
+        
+        <div class="checkbox-group">
+            <h3>训练选项</h3>
+            <div class="checkbox-item">
+                <input type="checkbox" id="skipExistingFile" checked>
+                <label for="skipExistingFile">跳过已存在的数据</label>
+            </div>
+        </div>
+        
+        <button class="button" onclick="testFileTraining()">开始DDL训练</button>
+    </div>
+    
+    <div id="result" class="result" style="display: none;">
+        <h3>请求参数预览</h3>
+        <pre id="requestParams"></pre>
+    </div>
+
+    <script>
+        function testAutoExtraction() {
+            const databaseName = document.getElementById('databaseName').value;
+            const autoExtract = document.getElementById('autoExtract').checked;
+            const skipExisting = document.getElementById('skipExisting').checked;
+            
+            const params = {
+                auto_extract: autoExtract,
+                database_name: databaseName.trim() || undefined,
+                skip_existing: skipExisting
+            };
+            
+            showResult('自动提取模式请求参数', params);
+        }
+        
+        function testFileTraining() {
+            const ddlContent = document.getElementById('ddlContent').value;
+            const skipExisting = document.getElementById('skipExistingFile').checked;
+            
+            const params = {
+                auto_extract: false,
+                ddl_content: ddlContent,
+                skip_existing: skipExisting
+            };
+            
+            showResult('文件训练模式请求参数', params);
+        }
+        
+        function showResult(title, params) {
+            const resultDiv = document.getElementById('result');
+            const paramsDiv = document.getElementById('requestParams');
+            
+            paramsDiv.textContent = `${title}:\n\n${JSON.stringify(params, null, 2)}`;
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result success';
+            
+            // 滚动到结果区域
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>

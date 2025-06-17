@@ -33,8 +33,9 @@ class DatabaseDatasourceRepository:
     
     def __init__(self):
         self._connection_pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
+        self._schema_initialized = False
         self._initialize_pool()
-    
+
     def _initialize_pool(self):
         """Initialize database connection pool"""
         try:
@@ -49,10 +50,7 @@ class DatabaseDatasourceRepository:
                 user=db_config["user"],
                 password=db_config["password"]
             )
-            
-            # Ensure schema exists
-            asyncio.create_task(self._ensure_schema())
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize database connection pool: {e}")
             raise
@@ -76,23 +74,57 @@ class DatabaseDatasourceRepository:
                         # Create basic schema if migration file is missing
                         cursor.execute("CREATE SCHEMA IF NOT EXISTS database_management;")
                         connection.commit()
-                        
+                    except psycopg2.errors.DuplicateObject as e:
+                        # Objects already exist, this is fine
+                        connection.rollback()
+                        logger.debug(f"Database objects already exist: {e}")
+
             finally:
                 self._connection_pool.putconn(connection)
-                
+
         except Exception as e:
             logger.error(f"Failed to ensure database schema: {e}")
             raise
-    
+
+    async def _table_exists(self) -> bool:
+        """Check if the database_datasources table exists"""
+        try:
+            connection = self._connection_pool.getconn()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables
+                            WHERE table_schema = 'database_management'
+                            AND table_name = 'database_datasources'
+                        );
+                    """)
+                    result = cursor.fetchone()
+                    return result[0] if result else False
+            finally:
+                self._connection_pool.putconn(connection)
+        except Exception as e:
+            logger.warning(f"Failed to check table existence: {e}")
+            return False
+
+    async def _ensure_schema_if_needed(self):
+        """Ensure schema is initialized (called lazily)"""
+        if not self._schema_initialized:
+            # Check if table already exists before running migration
+            if not await self._table_exists():
+                await self._ensure_schema()
+            self._schema_initialized = True
+
     async def create_datasource(self, datasource_data: DatabaseDatasourceCreate) -> DatabaseDatasource:
         """Create a new datasource"""
+        await self._ensure_schema_if_needed()
         try:
             connection = self._connection_pool.getconn()
             try:
                 with connection.cursor(cursor_factory=RealDictCursor) as cursor:
                     cursor.execute("""
-                        INSERT INTO database_management.database_datasources 
-                        (name, description, database_type, host, port, database_name, 
+                        INSERT INTO database_management.database_datasources
+                        (name, description, database_type, host, port, database_name,
                          username, password, readonly_mode, allowed_operations)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING *;
@@ -108,15 +140,16 @@ class DatabaseDatasourceRepository:
                         datasource_data.readonly_mode,
                         datasource_data.allowed_operations or ["SELECT"]
                     ))
-                    
+
                     row = cursor.fetchone()
                     connection.commit()
-                    
+
+                    logger.info(f"Created datasource: {datasource_data.name} (ID: {row['id']})")
                     return self._row_to_datasource(row)
-                    
+
             finally:
                 self._connection_pool.putconn(connection)
-                
+
         except psycopg2.IntegrityError as e:
             if "unique constraint" in str(e).lower():
                 raise ValueError(f"Datasource name '{datasource_data.name}' already exists")
@@ -127,6 +160,7 @@ class DatabaseDatasourceRepository:
     
     async def get_datasource(self, datasource_id: int) -> Optional[DatabaseDatasource]:
         """Get datasource by ID"""
+        await self._ensure_schema_if_needed()
         try:
             connection = self._connection_pool.getconn()
             try:
@@ -155,6 +189,7 @@ class DatabaseDatasourceRepository:
         offset: int = 0,
     ) -> List[DatabaseDatasource]:
         """List datasources with filtering"""
+        await self._ensure_schema_if_needed()
         try:
             connection = self._connection_pool.getconn()
             try:

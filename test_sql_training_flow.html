@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL训练流程测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .step {
+            border-left: 4px solid #007bff;
+            padding-left: 15px;
+            margin: 15px 0;
+        }
+        .step.completed {
+            border-left-color: #28a745;
+        }
+        .step.error {
+            border-left-color: #dc3545;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 5px 0 0;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .button.success {
+            background: #28a745;
+        }
+        .button.danger {
+            background: #dc3545;
+        }
+        .textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+            font-family: monospace;
+            resize: vertical;
+        }
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .warning {
+            background: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+        .code {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 SQL训练完整流程测试</h1>
+    
+    <div class="card">
+        <h2>📋 问题诊断</h2>
+        <div class="result warning">
+            <h3>当前问题：</h3>
+            <p><strong>DDL训练成功</strong> ✅ - 表结构信息已存储</p>
+            <p><strong>SQL生成失败</strong> ❌ - "未找到相关的训练数据"</p>
+            <p><strong>根本原因</strong>: 缺少SQL问答对训练数据</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>🎯 解决方案</h2>
+        
+        <div class="step">
+            <h3>步骤1: DDL训练（已完成）</h3>
+            <p>✅ 您已经成功完成了DDL训练，10条DDL语句都已处理</p>
+            <div class="code">响应示例：
+{
+  "success": true,
+  "total": 10,
+  "successful": 10,
+  "failed": 0
+}</div>
+        </div>
+
+        <div class="step">
+            <h3>步骤2: SQL问答对训练（需要完成）</h3>
+            <p>⚠️ 这是关键步骤！需要添加问题-SQL对应关系</p>
+            
+            <h4>推荐的SQL训练数据：</h4>
+            <textarea id="sqlTrainingData" class="textarea" rows="15">
+[
+  {
+    "question": "查询所有用户",
+    "sql": "SELECT * FROM database_management.database_datasources;"
+  },
+  {
+    "question": "统计数据源总数",
+    "sql": "SELECT COUNT(*) FROM database_management.database_datasources;"
+  },
+  {
+    "question": "查询活跃的数据源",
+    "sql": "SELECT * FROM database_management.database_datasources WHERE connection_status = 'CONNECTED';"
+  },
+  {
+    "question": "查询最近创建的数据源",
+    "sql": "SELECT * FROM database_management.database_datasources ORDER BY created_at DESC LIMIT 10;"
+  },
+  {
+    "question": "查询所有连接测试记录",
+    "sql": "SELECT * FROM database_management.connection_tests ORDER BY tested_at DESC;"
+  },
+  {
+    "question": "统计成功的连接测试",
+    "sql": "SELECT COUNT(*) FROM database_management.connection_tests WHERE test_result = true;"
+  },
+  {
+    "question": "查询查询历史",
+    "sql": "SELECT * FROM text2sql.query_history ORDER BY created_at DESC LIMIT 20;"
+  },
+  {
+    "question": "统计SQL查询总数",
+    "sql": "SELECT COUNT(*) FROM text2sql.sql_queries;"
+  },
+  {
+    "question": "查询训练数据",
+    "sql": "SELECT * FROM text2sql.training_data WHERE is_active = true;"
+  },
+  {
+    "question": "查看向量嵌入数据",
+    "sql": "SELECT * FROM text2sql.vanna_embeddings ORDER BY created_at DESC LIMIT 10;"
+  }
+]</textarea>
+            
+            <button class="button" onclick="copyTrainingData()">📋 复制训练数据</button>
+            <button class="button success" onclick="showInstructions()">📖 查看操作步骤</button>
+        </div>
+
+        <div class="step">
+            <h3>步骤3: 测试SQL生成</h3>
+            <p>完成SQL训练后，测试以下问题：</p>
+            <ul>
+                <li>"查询所有用户"</li>
+                <li>"统计数据源总数"</li>
+                <li>"查询活跃的数据源"</li>
+            </ul>
+        </div>
+    </div>
+
+    <div id="instructions" class="card" style="display: none;">
+        <h2>📖 详细操作步骤</h2>
+        
+        <div class="step">
+            <h3>1. 进入SQL训练页面</h3>
+            <p>在deer-flow界面中：</p>
+            <ol>
+                <li>点击 <strong>设置</strong> 菜单</li>
+                <li>选择 <strong>Text2SQL</strong> 标签</li>
+                <li>点击 <strong>SQL训练</strong> 子标签</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>2. 添加训练数据</h3>
+            <p>在SQL训练页面：</p>
+            <ol>
+                <li>点击 <strong>"加载示例"</strong> 按钮（或手动添加）</li>
+                <li>复制上面的训练数据，逐个添加问答对</li>
+                <li>确保每个问题都有对应的SQL查询</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>3. 开始训练</h3>
+            <ol>
+                <li>检查所有问答对都显示 "✅ 示例有效"</li>
+                <li>点击 <strong>"开始SQL训练"</strong> 按钮</li>
+                <li>等待训练完成</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>4. 验证结果</h3>
+            <ol>
+                <li>回到 <strong>SQL查询</strong> 标签</li>
+                <li>输入问题："查询所有用户"</li>
+                <li>点击 <strong>"生成SQL"</strong></li>
+                <li>应该能成功生成SQL而不是报错</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>🔍 技术原理</h2>
+        <div class="result">
+            <h3>为什么需要两步训练？</h3>
+            <p><strong>DDL训练</strong>：让模型了解数据库结构（表、字段、关系）</p>
+            <p><strong>SQL训练</strong>：让模型学会如何将自然语言转换为SQL查询</p>
+            <p><strong>两者缺一不可</strong>：只有DDL没有SQL示例，模型不知道如何生成查询</p>
+        </div>
+    </div>
+
+    <script>
+        function copyTrainingData() {
+            const textarea = document.getElementById('sqlTrainingData');
+            textarea.select();
+            document.execCommand('copy');
+            alert('✅ 训练数据已复制到剪贴板！');
+        }
+        
+        function showInstructions() {
+            const instructions = document.getElementById('instructions');
+            if (instructions.style.display === 'none') {
+                instructions.style.display = 'block';
+                instructions.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                instructions.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

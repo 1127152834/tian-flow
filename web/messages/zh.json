@@ -1,0 +1,311 @@
+{
+  "common": {
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "close": "关闭",
+    "back": "返回",
+    "next": "下一步",
+    "previous": "上一步",
+    "submit": "提交",
+    "reset": "重置",
+    "search": "搜索",
+    "filter": "筛选",
+    "sort": "排序",
+    "export": "导出",
+    "import": "导入",
+    "copy": "复制",
+    "paste": "粘贴",
+    "cut": "剪切",
+    "undo": "撤销",
+    "redo": "重做",
+    "select": "选择",
+    "selectAll": "全选",
+    "clear": "清除",
+    "refresh": "刷新",
+    "retry": "重试",
+    "confirm": "确认",
+    "yes": "是",
+    "no": "否",
+    "ok": "确定",
+    "apply": "应用",
+    "settings": "设置",
+    "help": "帮助",
+    "about": "关于",
+    "contact": "联系",
+    "privacy": "隐私",
+    "terms": "条款",
+    "license": "许可证"
+  },
+  "navigation": {
+    "home": "首页",
+    "chat": "对话",
+    "settings": "设置",
+    "database": "数据库",
+    "api": "API 管理"
+  },
+  "landing": {
+    "hero": {
+      "title": "深度研究触手可及",
+      "subtitle": "认识 DeerFlow，您的个人深度研究助手。凭借搜索引擎、网络爬虫、Python 和 MCP 服务等强大工具，它能提供即时洞察、全面报告，甚至制作引人入胜的播客。",
+      "getStarted": "开始使用",
+      "learnMore": "了解更多",
+      "starOnGithub": "在 GitHub 上点赞",
+      "deerStandsFor": "* DEER 代表深度探索和高效研究。"
+    },
+    "coreFeatures": {
+      "title": "核心功能",
+      "description": "了解 DeerFlow 的强大之处。",
+      "features": {
+        "deeperResearch": {
+          "name": "深入挖掘，广泛覆盖",
+          "description": "通过先进工具解锁更深层的洞察。我们强大的搜索+爬虫和 Python 工具收集全面数据，提供深入报告以增强您的研究。"
+        },
+        "humanInLoop": {
+          "name": "人机协作",
+          "description": "通过简单的自然语言完善您的研究计划或调整重点领域。"
+        },
+        "langStack": {
+          "name": "Lang 技术栈",
+          "description": "使用 LangChain 和 LangGraph 框架自信构建。"
+        },
+        "mcpIntegrations": {
+          "name": "MCP 集成",
+          "description": "通过无缝的 MCP 集成增强您的研究工作流程并扩展您的工具包。"
+        },
+        "podcastGeneration": {
+          "name": "播客生成",
+          "description": "从报告中即时生成播客。非常适合移动学习或轻松分享研究成果。"
+        }
+      },
+      "learnMore": "了解更多"
+    },
+    "caseStudies": {
+      "title": "案例研究",
+      "description": "通过回放查看 DeerFlow 的实际应用。",
+      "clickToWatch": "点击观看回放"
+    },
+    "footer": {
+      "quote": "源于开源，回馈开源。",
+      "license": "基于 MIT 许可证授权",
+      "copyright": "© {year} DeerFlow"
+    }
+  },
+  "chat": {
+    "welcome": {
+      "greeting": "👋 您好！",
+      "description": "欢迎使用 🦌 DeerFlow，这是一个基于前沿语言模型构建的深度研究助手，帮助您在网络上搜索、浏览信息并处理复杂任务。"
+    },
+    "input": {
+      "placeholder": "问我任何问题...",
+      "send": "发送",
+      "stop": "停止",
+      "enhancePrompt": "使用 AI 增强提示",
+      "deepThinking": "深度思考",
+      "investigation": "调研模式",
+      "deepThinkingTooltip": "启用后，DeerFlow 将使用推理模型（{model}）生成更周全的计划。",
+      "investigationTooltip": "启用后，DeerFlow 将在制定计划前进行快速搜索。这对于与时事和新闻相关的研究很有用。",
+      "deepThinkingMode": "深度思考模式：{status}",
+      "investigationMode": "调研模式：{status}",
+      "on": "开启",
+      "off": "关闭"
+    },
+    "reportStyle": {
+      "title": "选择写作风格",
+      "description": "为您的研究报告选择写作风格。每种风格都针对不同的受众和目的进行了优化。",
+      "currentStyle": "写作风格：{style}",
+      "tooltip": "为您的研究报告选择写作风格。不同的风格针对不同的受众和目的进行了优化。",
+      "academic": {
+        "label": "学术",
+        "description": "正式、客观、分析性，使用精确术语"
+      },
+      "popularScience": {
+        "label": "科普",
+        "description": "引人入胜，面向大众读者"
+      },
+      "news": {
+        "label": "新闻",
+        "description": "事实性、简洁、公正的新闻风格"
+      },
+      "socialMedia": {
+        "label": "社交媒体",
+        "description": "简洁、吸引眼球、易于分享"
+      }
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "dialog": {
+      "title": "DeerFlow 设置",
+      "description": "在这里管理您的 DeerFlow 设置。",
+      "cancel": "取消",
+      "save": "保存"
+    },
+    "tabs": {
+      "general": "常规",
+      "database": "数据库",
+      "text2sql": "Text2SQL",
+      "apiManagement": "API 管理",
+      "mcp": "MCP"
+    },
+    "general": {
+      "title": "常规",
+      "autoAcceptPlan": "允许自动接受计划",
+      "maxPlanIterations": "最大计划迭代次数",
+      "maxPlanIterationsDescription": "设置为 1 表示单步规划。设置为 2 或更多以启用重新规划。",
+      "maxSteps": "研究计划的最大步骤数",
+      "maxStepsDescription": "默认情况下，每个研究计划有 3 个步骤。",
+      "maxSearchResults": "最大搜索结果数",
+      "maxSearchResultsDescription": "默认情况下，每个搜索步骤有 3 个结果。",
+      "validationErrors": {
+        "minPlanIterations": "最大计划迭代次数必须至少为 1。",
+        "minSteps": "最大步骤数必须至少为 1。",
+        "minSearchResults": "最大搜索结果数必须至少为 1。"
+      }
+    },
+    "database": {
+      "title": "数据库管理",
+      "description": "管理数据库连接和数据源，用于 Text2SQL 和其他功能。",
+      "datasources": {
+        "title": "数据库数据源",
+        "description": "管理您的数据库连接，用于 Text2SQL 和数据分析。",
+        "addDatasource": "添加数据源",
+        "searchPlaceholder": "搜索和筛选",
+        "filterAll": "所有类型",
+        "filterAllStatus": "所有状态",
+        "noResults": "未找到数据源",
+        "noResultsDescription": "没有数据源符合您当前的筛选条件。请尝试调整搜索条件。",
+        "empty": "暂无数据源",
+        "emptyDescription": "开始创建您的第一个数据库数据源。",
+        "createFirst": "创建第一个数据源",
+        "errors": {
+          "loadFailed": "错误",
+          "loadFailedDescription": "加载数据库数据源失败"
+        }
+      },
+      "card": {
+        "noDescription": "未提供描述",
+        "database": "数据库",
+        "user": "用户",
+        "readOnly": "只读",
+        "operations": "{count} 个操作",
+        "lastTested": "上次测试：{time}",
+        "neverTested": "从未测试",
+        "justNow": "刚刚",
+        "minutesAgo": "{minutes}分钟前",
+        "hoursAgo": "{hours}小时前",
+        "daysAgo": "{days}天前",
+        "actions": {
+          "edit": "编辑",
+          "testConnection": "测试连接",
+          "viewSchema": "查看架构",
+          "delete": "删除"
+        },
+        "deleteDialog": {
+          "title": "删除数据源",
+          "description": "确定要删除 \"{name}\" 吗？此操作无法撤销。",
+          "cancel": "取消",
+          "delete": "删除"
+        },
+        "messages": {
+          "deleteSuccess": "成功",
+          "deleteSuccessDescription": "数据源删除成功",
+          "deleteFailed": "错误",
+          "deleteFailedDescription": "删除数据源失败",
+          "testSuccess": "连接测试成功",
+          "testSuccessDescription": "数据库连接正常工作",
+          "testFailed": "连接测试失败",
+          "testFailedDescription": "{error}",
+          "testError": "错误",
+          "testErrorDescription": "测试数据库连接失败"
+        }
+      }
+    },
+    "apiManagement": {
+      "title": "API 管理",
+      "description": "管理 API 定义并监控 API 调用。",
+      "statistics": {
+        "totalApis": "总API数",
+        "enabledApis": "已启用",
+        "sevenDayCalls": "7天调用",
+        "successRate": "成功率"
+      },
+      "tabs": {
+        "apiDefinitions": "API定义",
+        "callLogs": "调用日志"
+      },
+      "actions": {
+        "searchPlaceholder": "搜索API...",
+        "allCategories": "所有分类",
+        "importCurl": "导入curl",
+        "newApi": "新建API",
+        "execute": "执行",
+        "edit": "编辑",
+        "copy": "复制",
+        "enable": "启用",
+        "disable": "禁用",
+        "delete": "删除"
+      },
+      "status": {
+        "enabled": "已启用",
+        "disabled": "已禁用",
+        "loading": "加载中...",
+        "noApis": "暂无API定义"
+      },
+      "messages": {
+        "loadFailed": "加载失败",
+        "loadFailedDescription": "无法加载API列表",
+        "deleteConfirm": "确定要删除API \"{name}\" 吗？",
+        "deleteSuccess": "删除成功",
+        "deleteSuccessDescription": "API \"{name}\" 已删除",
+        "deleteFailed": "删除失败",
+        "deleteFailedDescription": "无法删除API",
+        "statusUpdated": "状态更新",
+        "statusUpdatedDescription": "API \"{name}\" 已{status}",
+        "updateFailed": "更新失败",
+        "updateFailedDescription": "无法更新API状态",
+        "copied": "已复制",
+        "copiedDescription": "API配置已复制到剪贴板"
+      }
+    },
+    "mcp": {
+      "title": "MCP 服务器",
+      "description": "模型上下文协议通过集成外部工具来增强 DeerFlow，用于私有域搜索、网页浏览、订餐等任务。点击这里",
+      "learnMore": "了解更多关于 MCP 的信息。",
+      "actions": {
+        "enableDisable": "启用/禁用服务器",
+        "deleteServer": "删除服务器"
+      },
+      "status": {
+        "disabled": "已禁用",
+        "new": "新建"
+      }
+    },
+    "text2sql": {
+      "title": "Text2SQL 训练",
+      "description": "训练 AI 模型将自然语言问题转换为 SQL 查询",
+      "breadcrumb": {
+        "settings": "设置",
+        "text2sql": "Text2SQL 训练"
+      },
+      "datasource": {
+        "title": "数据库数据源",
+        "description": "选择一个数据库数据源来训练 Text2SQL 模型",
+        "placeholder": "选择数据源...",
+        "noDataSources": "未找到数据库数据源。请先在数据库管理标签页中创建数据源。"
+      },
+      "tabs": {
+        "overview": "训练概览",
+        "dataManagement": "数据管理",
+        "ddlTraining": "DDL训练",
+        "documentationTraining": "文档训练",
+        "sqlTraining": "SQL训练",
+        "modelTest": "模型测试"
+      }
+    }
+  }
+}

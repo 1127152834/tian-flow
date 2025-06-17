@@ -13,10 +13,9 @@ import { Button } from "~/components/ui/button";
 import { Logo } from "~/components/deer-flow/logo";
 import { ThemeToggle } from "~/components/deer-flow/theme-toggle";
 import { Tooltip } from "~/components/deer-flow/tooltip";
-import { LanguageSwitcher } from "~/components/deer-flow/language-switcher";
-import { SettingsDialog } from "../[locale]/settings/dialogs/settings-dialog";
+import { SettingsDialog } from "../settings/dialogs/settings-dialog";
 
-const Main = dynamic(() => import("../[locale]/chat/main"), {
+const Main = dynamic(() => import("./main"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full w-full items-center justify-center">
@@ -25,13 +24,12 @@ const Main = dynamic(() => import("../[locale]/chat/main"), {
   ),
 });
 
-export default function ChatPage() {
+export default function HomePage() {
   return (
     <div className="flex h-screen w-screen justify-center overscroll-none">
       <header className="fixed top-0 left-0 flex h-12 w-full items-center justify-between px-4">
         <Logo />
-        <div className="flex items-center gap-2">
-          <LanguageSwitcher />
+        <div className="flex items-center">
           <Tooltip title="Star DeerFlow on GitHub">
             <Button variant="ghost" size="icon" asChild>
               <Link

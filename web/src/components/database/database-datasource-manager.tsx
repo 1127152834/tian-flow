@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/com
 import { Badge } from "~/components/ui/badge";
 import { Skeleton } from "~/components/ui/skeleton";
 import { useToast } from "~/hooks/use-toast";
+import { useLanguage } from "~/contexts/language-context";
 import {
   listDatabaseDatasources,
   type DatabaseDatasource,
@@ -32,6 +33,7 @@ export function DatabaseDatasourceManager() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDatasource, setEditingDatasource] = useState<DatabaseDatasource | null>(null);
   const { toast } = useToast();
+  const { t } = useLanguage();
 
   const loadDatasources = async () => {
     try {
@@ -47,8 +49,8 @@ export function DatabaseDatasourceManager() {
     } catch (error) {
       console.error("Failed to load datasources:", error);
       toast({
-        title: "Error",
-        description: "Failed to load database datasources",
+        title: t('settings.database.datasources.errors.loadFailed'),
+        description: t('settings.database.datasources.errors.loadFailedDescription'),
         variant: "destructive",
       });
     } finally {
@@ -104,21 +106,21 @@ export function DatabaseDatasourceManager() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Database Datasources</h2>
+          <h2 className="text-2xl font-bold tracking-tight">{t('settings.database.datasources.title')}</h2>
           <p className="text-muted-foreground">
-            Manage your database connections for Text2SQL and data analysis.
+            {t('settings.database.datasources.description')}
           </p>
         </div>
         <Button onClick={handleCreateDatasource}>
           <Plus className="mr-2 h-4 w-4" />
-          Add Datasource
+          {t('settings.database.datasources.addDatasource')}
         </Button>
       </div>
 
       {/* Search and Filters */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Search & Filter</CardTitle>
+          <CardTitle className="text-lg">{t('settings.database.datasources.searchPlaceholder')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4 md:flex-row md:items-center">
@@ -126,7 +128,7 @@ export function DatabaseDatasourceManager() {
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search datasources..."
+                  placeholder={t('settings.database.datasources.searchPlaceholder')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -140,17 +142,17 @@ export function DatabaseDatasourceManager() {
                 onChange={(e) => setFilterType(e.target.value)}
                 className="rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="">All Types</option>
+                <option value="">{t('settings.database.datasources.filterAll')}</option>
                 <option value="MYSQL">MySQL</option>
                 <option value="POSTGRESQL">PostgreSQL</option>
               </select>
-              
+
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
                 className="rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="">All Status</option>
+                <option value="">{t('settings.database.datasources.filterAllStatus')}</option>
                 <option value="CONNECTED">Connected</option>
                 <option value="DISCONNECTED">Disconnected</option>
                 <option value="ERROR">Error</option>
@@ -193,16 +195,21 @@ export function DatabaseDatasourceManager() {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <div className="text-center">
-                <h3 className="text-lg font-medium">No datasources found</h3>
+                <h3 className="text-lg font-medium">
+                  {searchTerm || filterType || filterStatus
+                    ? t('settings.database.datasources.noResults')
+                    : t('settings.database.datasources.empty')
+                  }
+                </h3>
                 <p className="text-muted-foreground mb-4">
                   {searchTerm || filterType || filterStatus
-                    ? "Try adjusting your search or filters"
-                    : "Get started by creating your first database datasource"}
+                    ? t('settings.database.datasources.noResultsDescription')
+                    : t('settings.database.datasources.emptyDescription')}
                 </p>
                 {!searchTerm && !filterType && !filterStatus && (
                   <Button onClick={handleCreateDatasource}>
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Your First Datasource
+                    {t('settings.database.datasources.createFirst')}
                   </Button>
                 )}
               </div>

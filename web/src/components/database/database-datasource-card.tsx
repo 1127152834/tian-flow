@@ -38,6 +38,7 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { useToast } from "~/hooks/use-toast";
+import { useLanguage } from "~/contexts/language-context";
 import {
   type DatabaseDatasource,
   deleteDatabaseDatasource,
@@ -66,6 +67,7 @@ export function DatabaseDatasourceCard({
   const [schemaDialogOpen, setSchemaDialogOpen] = useState(false);
   const [testing, setTesting] = useState(false);
   const { toast } = useToast();
+  const { t } = useLanguage();
 
   const handleEdit = () => {
     onEdit(datasource);
@@ -75,15 +77,15 @@ export function DatabaseDatasourceCard({
     try {
       await deleteDatabaseDatasource(datasource.id);
       toast({
-        title: "Success",
-        description: "Datasource deleted successfully",
+        title: t('settings.database.card.messages.deleteSuccess'),
+        description: t('settings.database.card.messages.deleteSuccessDescription'),
       });
       onDelete();
     } catch (error) {
       console.error("Failed to delete datasource:", error);
       toast({
-        title: "Error",
-        description: "Failed to delete datasource",
+        title: t('settings.database.card.messages.deleteFailed'),
+        description: t('settings.database.card.messages.deleteFailedDescription'),
         variant: "destructive",
       });
     } finally {
@@ -98,8 +100,8 @@ export function DatabaseDatasourceCard({
 
       if (result.success) {
         toast({
-          title: "Connection Test Successful",
-          description: "Database connection is working properly",
+          title: t('settings.database.card.messages.testSuccess'),
+          description: t('settings.database.card.messages.testSuccessDescription'),
         });
         // Refresh the datasource list to show updated status
         if (onRefresh) {
@@ -107,8 +109,8 @@ export function DatabaseDatasourceCard({
         }
       } else {
         toast({
-          title: "Connection Test Failed",
-          description: result.error || "Unknown error occurred",
+          title: t('settings.database.card.messages.testFailed'),
+          description: t('settings.database.card.messages.testFailedDescription', { error: result.error || "Unknown error occurred" }),
           variant: "destructive",
         });
         // Also refresh on failure to show updated error status
@@ -119,8 +121,8 @@ export function DatabaseDatasourceCard({
     } catch (error) {
       console.error("Failed to test connection:", error);
       toast({
-        title: "Error",
-        description: "Failed to test database connection",
+        title: t('settings.database.card.messages.testError'),
+        description: t('settings.database.card.messages.testErrorDescription'),
         variant: "destructive",
       });
       // Refresh even on error to show any status changes
@@ -150,20 +152,20 @@ export function DatabaseDatasourceCard({
   };
 
   const formatLastTested = (dateString?: string) => {
-    if (!dateString) return "Never tested";
-    
+    if (!dateString) return t('settings.database.card.neverTested');
+
     const date = new Date(dateString);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
-    
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    
+
+    if (diffMins < 1) return t('settings.database.card.justNow');
+    if (diffMins < 60) return t('settings.database.card.minutesAgo', { minutes: diffMins });
+    if (diffHours < 24) return t('settings.database.card.hoursAgo', { hours: diffHours });
+    if (diffDays < 7) return t('settings.database.card.daysAgo', { days: diffDays });
+
     return date.toLocaleDateString();
   };
 
@@ -175,7 +177,7 @@ export function DatabaseDatasourceCard({
             <div className="space-y-1">
               <CardTitle className="text-lg">{datasource.name}</CardTitle>
               <CardDescription className="line-clamp-2">
-                {datasource.description || "No description provided"}
+                {datasource.description || t('settings.database.card.noDescription')}
               </CardDescription>
             </div>
             <DropdownMenu>
@@ -187,7 +189,7 @@ export function DatabaseDatasourceCard({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleEdit}>
                   <Edit className="mr-2 h-4 w-4" />
-                  Edit
+                  {t('settings.database.card.actions.edit')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleTestConnection} disabled={testing}>
                   {testing ? (
@@ -195,19 +197,19 @@ export function DatabaseDatasourceCard({
                   ) : (
                     <TestTube className="mr-2 h-4 w-4" />
                   )}
-                  Test Connection
+                  {t('settings.database.card.actions.testConnection')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleViewSchema}>
                   <Eye className="mr-2 h-4 w-4" />
-                  View Schema
+                  {t('settings.database.card.actions.viewSchema')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={() => setDeleteDialogOpen(true)}
                   className="text-red-600"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
+                  {t('settings.database.card.actions.delete')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -227,12 +229,12 @@ export function DatabaseDatasourceCard({
             </div>
             
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Database:</span>
+              <span className="text-muted-foreground">{t('settings.database.card.database')}:</span>
               <span className="font-mono">{datasource.database_name}</span>
             </div>
-            
+
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">User:</span>
+              <span className="text-muted-foreground">{t('settings.database.card.user')}:</span>
               <span className="font-mono">{datasource.username}</span>
             </div>
           </div>
@@ -248,17 +250,17 @@ export function DatabaseDatasourceCard({
             </Badge>
             
             {datasource.readonly_mode && (
-              <Badge variant="secondary">Read-only</Badge>
+              <Badge variant="secondary">{t('settings.database.card.readOnly')}</Badge>
             )}
-            
+
             <Badge variant="outline">
-              {datasource.allowed_operations.length} operations
+              {t('settings.database.card.operations', { count: datasource.allowed_operations.length })}
             </Badge>
           </div>
 
           {/* Last Tested */}
           <div className="text-xs text-muted-foreground">
-            Last tested: {formatLastTested(datasource.last_tested_at)}
+            {t('settings.database.card.lastTested', { time: formatLastTested(datasource.last_tested_at) })}
           </div>
 
           {/* Connection Error */}
@@ -275,15 +277,15 @@ export function DatabaseDatasourceCard({
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Datasource</AlertDialogTitle>
+            <AlertDialogTitle>{t('settings.database.card.deleteDialog.title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{datasource.name}"? This action cannot be undone.
+              {t('settings.database.card.deleteDialog.description', { name: datasource.name })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('settings.database.card.deleteDialog.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-              Delete
+              {t('settings.database.card.deleteDialog.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

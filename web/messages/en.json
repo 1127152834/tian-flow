@@ -1,0 +1,311 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "submit": "Submit",
+    "reset": "Reset",
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "export": "Export",
+    "import": "Import",
+    "copy": "Copy",
+    "paste": "Paste",
+    "cut": "Cut",
+    "undo": "Undo",
+    "redo": "Redo",
+    "select": "Select",
+    "selectAll": "Select All",
+    "clear": "Clear",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "apply": "Apply",
+    "settings": "Settings",
+    "help": "Help",
+    "about": "About",
+    "contact": "Contact",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "license": "License"
+  },
+  "navigation": {
+    "home": "Home",
+    "chat": "Chat",
+    "settings": "Settings",
+    "database": "Database",
+    "api": "API Management"
+  },
+  "landing": {
+    "hero": {
+      "title": "Deep Research at Your Fingertips",
+      "subtitle": "Meet DeerFlow, your personal Deep Research assistant. With powerful tools like search engines, web crawlers, Python and MCP services, it delivers instant insights, comprehensive reports, and even captivating podcasts.",
+      "getStarted": "Get Started",
+      "learnMore": "Learn More",
+      "starOnGithub": "Star on GitHub",
+      "deerStandsFor": "* DEER stands for Deep Exploration and Efficient Research."
+    },
+    "coreFeatures": {
+      "title": "Core Features",
+      "description": "Find out what makes DeerFlow effective.",
+      "features": {
+        "deeperResearch": {
+          "name": "Dive Deeper and Reach Wider",
+          "description": "Unlock deeper insights with advanced tools. Our powerful search + crawling and Python tools gathers comprehensive data, delivering in-depth reports to enhance your study."
+        },
+        "humanInLoop": {
+          "name": "Human-in-the-loop",
+          "description": "Refine your research plan, or adjust focus areas all through simple natural language."
+        },
+        "langStack": {
+          "name": "Lang Stack",
+          "description": "Build with confidence using the LangChain and LangGraph frameworks."
+        },
+        "mcpIntegrations": {
+          "name": "MCP Integrations",
+          "description": "Supercharge your research workflow and expand your toolkit with seamless MCP integrations."
+        },
+        "podcastGeneration": {
+          "name": "Podcast Generation",
+          "description": "Instantly generate podcasts from reports. Perfect for on-the-go learning or sharing findings effortlessly."
+        }
+      },
+      "learnMore": "Learn more"
+    },
+    "caseStudies": {
+      "title": "Case Studies",
+      "description": "See DeerFlow in action through replays.",
+      "clickToWatch": "Click to watch replay"
+    },
+    "footer": {
+      "quote": "Originated from Open Source, give back to Open Source.",
+      "license": "Licensed under MIT License",
+      "copyright": "© {year} DeerFlow"
+    }
+  },
+  "chat": {
+    "welcome": {
+      "greeting": "👋 Hello, there!",
+      "description": "Welcome to 🦌 DeerFlow, a deep research assistant built on cutting-edge language models, helps you search on web, browse information, and handle complex tasks."
+    },
+    "input": {
+      "placeholder": "Ask me anything...",
+      "send": "Send",
+      "stop": "Stop",
+      "enhancePrompt": "Enhance prompt with AI",
+      "deepThinking": "Deep Thinking",
+      "investigation": "Investigation",
+      "deepThinkingTooltip": "When enabled, DeerFlow will use reasoning model ({model}) to generate more thoughtful plans.",
+      "investigationTooltip": "When enabled, DeerFlow will perform a quick search before planning. This is useful for researches related to ongoing events and news.",
+      "deepThinkingMode": "Deep Thinking Mode: {status}",
+      "investigationMode": "Investigation Mode: {status}",
+      "on": "On",
+      "off": "Off"
+    },
+    "reportStyle": {
+      "title": "Choose Writing Style",
+      "description": "Select the writing style for your research reports. Each style is optimized for different audiences and purposes.",
+      "currentStyle": "Writing Style: {style}",
+      "tooltip": "Choose the writing style for your research reports. Different styles are optimized for different audiences and purposes.",
+      "academic": {
+        "label": "Academic",
+        "description": "Formal, objective, and analytical with precise terminology"
+      },
+      "popularScience": {
+        "label": "Popular Science",
+        "description": "Engaging and accessible for general audience"
+      },
+      "news": {
+        "label": "News",
+        "description": "Factual, concise, and impartial journalistic style"
+      },
+      "socialMedia": {
+        "label": "Social Media",
+        "description": "Concise, attention-grabbing, and shareable"
+      }
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "dialog": {
+      "title": "DeerFlow Settings",
+      "description": "Manage your DeerFlow settings here.",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "tabs": {
+      "general": "General",
+      "database": "Database",
+      "text2sql": "Text2SQL",
+      "apiManagement": "API Management",
+      "mcp": "MCP"
+    },
+    "general": {
+      "title": "General",
+      "autoAcceptPlan": "Allow automatic acceptance of plans",
+      "maxPlanIterations": "Max plan iterations",
+      "maxPlanIterationsDescription": "Set to 1 for single-step planning. Set to 2 or more to enable re-planning.",
+      "maxSteps": "Max steps of a research plan",
+      "maxStepsDescription": "By default, each research plan has 3 steps.",
+      "maxSearchResults": "Max search results",
+      "maxSearchResultsDescription": "By default, each search step has 3 results.",
+      "validationErrors": {
+        "minPlanIterations": "Max plan iterations must be at least 1.",
+        "minSteps": "Max step number must be at least 1.",
+        "minSearchResults": "Max search results must be at least 1."
+      }
+    },
+    "database": {
+      "title": "Database Management",
+      "description": "Manage database connections and data sources for Text2SQL and other features.",
+      "datasources": {
+        "title": "Database Datasources",
+        "description": "Manage your database connections for Text2SQL and data analysis.",
+        "addDatasource": "Add Datasource",
+        "searchPlaceholder": "Search & Filter",
+        "filterAll": "All Types",
+        "filterAllStatus": "All Status",
+        "noResults": "No datasources found",
+        "noResultsDescription": "No datasources match your current filters. Try adjusting your search criteria.",
+        "empty": "No datasources yet",
+        "emptyDescription": "Get started by creating your first database datasource.",
+        "createFirst": "Create First Datasource",
+        "errors": {
+          "loadFailed": "Error",
+          "loadFailedDescription": "Failed to load database datasources"
+        }
+      },
+      "card": {
+        "noDescription": "No description provided",
+        "database": "Database",
+        "user": "User",
+        "readOnly": "Read-only",
+        "operations": "{count} operations",
+        "lastTested": "Last tested: {time}",
+        "neverTested": "Never tested",
+        "justNow": "Just now",
+        "minutesAgo": "{minutes}m ago",
+        "hoursAgo": "{hours}h ago",
+        "daysAgo": "{days}d ago",
+        "actions": {
+          "edit": "Edit",
+          "testConnection": "Test Connection",
+          "viewSchema": "View Schema",
+          "delete": "Delete"
+        },
+        "deleteDialog": {
+          "title": "Delete Datasource",
+          "description": "Are you sure you want to delete \"{name}\"? This action cannot be undone.",
+          "cancel": "Cancel",
+          "delete": "Delete"
+        },
+        "messages": {
+          "deleteSuccess": "Success",
+          "deleteSuccessDescription": "Datasource deleted successfully",
+          "deleteFailed": "Error",
+          "deleteFailedDescription": "Failed to delete datasource",
+          "testSuccess": "Connection Test Successful",
+          "testSuccessDescription": "Database connection is working properly",
+          "testFailed": "Connection Test Failed",
+          "testFailedDescription": "{error}",
+          "testError": "Error",
+          "testErrorDescription": "Failed to test database connection"
+        }
+      }
+    },
+    "apiManagement": {
+      "title": "API Management",
+      "description": "Manage API definitions and monitor API calls.",
+      "statistics": {
+        "totalApis": "Total APIs",
+        "enabledApis": "Enabled",
+        "sevenDayCalls": "7-Day Calls",
+        "successRate": "Success Rate"
+      },
+      "tabs": {
+        "apiDefinitions": "API Definitions",
+        "callLogs": "Call Logs"
+      },
+      "actions": {
+        "searchPlaceholder": "Search APIs...",
+        "allCategories": "All Categories",
+        "importCurl": "Import cURL",
+        "newApi": "New API",
+        "execute": "Execute",
+        "edit": "Edit",
+        "copy": "Copy",
+        "enable": "Enable",
+        "disable": "Disable",
+        "delete": "Delete"
+      },
+      "status": {
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "loading": "Loading...",
+        "noApis": "No API definitions"
+      },
+      "messages": {
+        "loadFailed": "Load Failed",
+        "loadFailedDescription": "Unable to load API list",
+        "deleteConfirm": "Are you sure you want to delete API \"{name}\"?",
+        "deleteSuccess": "Delete Successful",
+        "deleteSuccessDescription": "API \"{name}\" has been deleted",
+        "deleteFailed": "Delete Failed",
+        "deleteFailedDescription": "Unable to delete API",
+        "statusUpdated": "Status Updated",
+        "statusUpdatedDescription": "API \"{name}\" has been {status}",
+        "updateFailed": "Update Failed",
+        "updateFailedDescription": "Unable to update API status",
+        "copied": "Copied",
+        "copiedDescription": "API configuration copied to clipboard"
+      }
+    },
+    "mcp": {
+      "title": "MCP Servers",
+      "description": "The Model Context Protocol boosts DeerFlow by integrating external tools for tasks like private domain searches, web browsing, food ordering, and more. Click here to",
+      "learnMore": "learn more about MCP.",
+      "actions": {
+        "enableDisable": "Enable/disable server",
+        "deleteServer": "Delete server"
+      },
+      "status": {
+        "disabled": "Disabled",
+        "new": "New"
+      }
+    },
+    "text2sql": {
+      "title": "Text2SQL Training",
+      "description": "Train AI models to convert natural language questions into SQL queries",
+      "breadcrumb": {
+        "settings": "Settings",
+        "text2sql": "Text2SQL Training"
+      },
+      "datasource": {
+        "title": "Database Datasource",
+        "description": "Select a database datasource to train Text2SQL models",
+        "placeholder": "Choose a datasource...",
+        "noDataSources": "No database datasources found. Please create a datasource first in the Database Management tab."
+      },
+      "tabs": {
+        "overview": "Training Overview",
+        "dataManagement": "Data Management",
+        "ddlTraining": "DDL Training",
+        "documentationTraining": "Documentation Training",
+        "sqlTraining": "SQL Training",
+        "modelTest": "Model Test"
+      }
+    }
+  }
+}

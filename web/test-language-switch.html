@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Language Switch Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌐 DeerFlow 语言切换测试</h1>
+    
+    <div class="test-section">
+        <h2>测试步骤</h2>
+        <ol>
+            <li>打开 <a href="http://localhost:3001" target="_blank">http://localhost:3001</a></li>
+            <li>查看页面是否显示英文内容</li>
+            <li>点击右上角的语言切换器（地球图标）</li>
+            <li>选择 "🇨🇳 中文"</li>
+            <li>验证页面内容是否切换为中文</li>
+            <li>刷新页面，验证语言选择是否保持</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h2>预期的中文翻译内容</h2>
+        <ul>
+            <li><strong>主标题：</strong>"深度研究触手可及"</li>
+            <li><strong>副标题：</strong>"认识 DeerFlow，您的个人深度研究助手..."</li>
+            <li><strong>按钮：</strong>"开始使用"、"了解更多"</li>
+            <li><strong>功能标题：</strong>"核心功能"</li>
+            <li><strong>案例研究：</strong>"案例研究"</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>聊天页面测试</h2>
+        <ol>
+            <li>访问 <a href="http://localhost:3001/chat" target="_blank">http://localhost:3001/chat</a></li>
+            <li>切换到中文</li>
+            <li>验证欢迎消息："👋 您好！"</li>
+            <li>验证描述文本包含"欢迎使用 🦌 DeerFlow"</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h2>快速测试链接</h2>
+        <button onclick="window.open('http://localhost:3001', '_blank')">打开首页</button>
+        <button onclick="window.open('http://localhost:3001/chat', '_blank')">打开聊天页</button>
+    </div>
+
+    <div class="test-section">
+        <h2>✅ 成功标准</h2>
+        <ul>
+            <li>页面加载无错误</li>
+            <li>语言切换器可见且可点击</li>
+            <li>切换到中文后，所有文本都显示为中文</li>
+            <li>刷新页面后语言选择保持不变</li>
+            <li>在不同页面间导航时语言保持一致</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('🧪 DeerFlow 语言切换测试页面已加载');
+        console.log('📝 请按照上述步骤进行测试');
+    </script>
+</body>
+</html>

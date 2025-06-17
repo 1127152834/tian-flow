@@ -131,7 +131,7 @@ export function DatabaseSchemaDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[95vh] w-[95vw]">
+      <DialogContent className="max-w-6xl max-h-[95vh] w-[95vw] min-w-[800px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Database className="h-5 w-5" />
@@ -274,23 +274,23 @@ export function DatabaseSchemaDialog({
                               {table.columns.map((column, index) => (
                                 <div
                                   key={index}
-                                  className="flex items-center justify-between p-2 rounded border bg-muted/20"
+                                  className="flex items-center justify-between p-3 rounded border bg-muted/20 min-w-0"
                                 >
-                                  <div className="flex items-center gap-3">
-                                    <span className="font-mono text-sm font-medium">
+                                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <span className="font-mono text-sm font-medium truncate">
                                       {getColumnName(column)}
                                     </span>
-                                    <Badge variant="secondary" className="text-xs">
+                                    <Badge variant="secondary" className="text-xs shrink-0">
                                       {formatColumnType(column)}
                                     </Badge>
                                     {!isColumnNullable(column) && (
-                                      <Badge variant="outline" className="text-xs">
+                                      <Badge variant="outline" className="text-xs shrink-0">
                                         NOT NULL
                                       </Badge>
                                     )}
                                   </div>
                                   {getColumnDefault(column) && (
-                                    <span className="text-xs text-muted-foreground font-mono">
+                                    <span className="text-xs text-muted-foreground font-mono ml-4 shrink-0">
                                       default: {getColumnDefault(column)}
                                     </span>
                                   )}

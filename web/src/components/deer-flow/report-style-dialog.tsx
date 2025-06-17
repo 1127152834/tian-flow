@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { Check, FileText, Newspaper, Users, GraduationCap } from "lucide-react";
+import { useLanguage } from '~/contexts/language-context';
 
 import { Button } from "~/components/ui/button";
 import {
@@ -18,36 +19,37 @@ import { cn } from "~/lib/utils";
 
 import { Tooltip } from "./tooltip";
 
-const REPORT_STYLES = [
-  {
-    value: "academic" as const,
-    label: "Academic",
-    description: "Formal, objective, and analytical with precise terminology",
-    icon: GraduationCap,
-  },
-  {
-    value: "popular_science" as const,
-    label: "Popular Science",
-    description: "Engaging and accessible for general audience",
-    icon: FileText,
-  },
-  {
-    value: "news" as const,
-    label: "News",
-    description: "Factual, concise, and impartial journalistic style",
-    icon: Newspaper,
-  },
-  {
-    value: "social_media" as const,
-    label: "Social Media",
-    description: "Concise, attention-grabbing, and shareable",
-    icon: Users,
-  },
-];
-
 export function ReportStyleDialog() {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const currentStyle = useSettingsStore((state) => state.general.reportStyle);
+
+  const REPORT_STYLES = [
+    {
+      value: "academic" as const,
+      label: t('chat.reportStyle.academic.label'),
+      description: t('chat.reportStyle.academic.description'),
+      icon: GraduationCap,
+    },
+    {
+      value: "popular_science" as const,
+      label: t('chat.reportStyle.popularScience.label'),
+      description: t('chat.reportStyle.popularScience.description'),
+      icon: FileText,
+    },
+    {
+      value: "news" as const,
+      label: t('chat.reportStyle.news.label'),
+      description: t('chat.reportStyle.news.description'),
+      icon: Newspaper,
+    },
+    {
+      value: "social_media" as const,
+      label: t('chat.reportStyle.socialMedia.label'),
+      description: t('chat.reportStyle.socialMedia.description'),
+      icon: Users,
+    },
+  ];
 
   const handleStyleChange = (
     style: "academic" | "popular_science" | "news" | "social_media",
@@ -68,11 +70,10 @@ export function ReportStyleDialog() {
         title={
           <div>
             <h3 className="mb-2 font-bold">
-              Writing Style: {currentStyleConfig.label}
+              {t('chat.reportStyle.currentStyle', { style: currentStyleConfig.label })}
             </h3>
             <p>
-              Choose the writing style for your research reports. Different
-              styles are optimized for different audiences and purposes.
+              {t('chat.reportStyle.tooltip')}
             </p>
           </div>
         }
@@ -86,12 +87,11 @@ export function ReportStyleDialog() {
           </Button>
         </DialogTrigger>
       </Tooltip>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px] min-w-[400px]">
         <DialogHeader>
-          <DialogTitle>Choose Writing Style</DialogTitle>
+          <DialogTitle>{t('chat.reportStyle.title')}</DialogTitle>
           <DialogDescription>
-            Select the writing style for your research reports. Each style is
-            optimized for different audiences and purposes.
+            {t('chat.reportStyle.description')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 py-4">

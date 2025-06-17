@@ -1,0 +1,40 @@
+name: 🔍 前端错误检查
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: [ 'web/**' ]
+  pull_request:
+    branches: [ main, develop ]
+    paths: [ 'web/**' ]
+
+jobs:
+  check-errors:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 📦 设置 Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'web/package-lock.json'
+        
+    - name: 📦 安装依赖
+      working-directory: ./web
+      run: npm ci
+      
+    - name: 📝 TypeScript 类型检查
+      working-directory: ./web
+      run: npm run check:types
+      
+    - name: 🔧 ESLint 检查
+      working-directory: ./web
+      run: npm run lint
+      
+    - name: 🏗️ 构建检查
+      working-directory: ./web
+      run: npm run build

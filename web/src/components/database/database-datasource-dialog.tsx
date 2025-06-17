@@ -256,7 +256,7 @@ export function DatabaseDatasourceDialog({
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-4xl max-h-[95vh] w-[90vw] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[95vh] w-[90vw] min-w-[600px] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? "Edit Database Datasource" : "Create Database Datasource"}

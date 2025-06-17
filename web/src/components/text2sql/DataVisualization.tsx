@@ -43,6 +43,9 @@ const DataVisualization: React.FC<DataVisualizationProps> = ({
     }
 
     const firstRow = data[0];
+    if (!firstRow) {
+      return { columns: [], numericColumns: [], textColumns: [], rowCount: 0 };
+    }
     const columns = Object.keys(firstRow);
     const numericColumns: string[] = [];
     const textColumns: string[] = [];

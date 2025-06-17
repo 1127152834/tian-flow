@@ -24,6 +24,7 @@ class Configuration:
     mcp_settings: dict = None  # MCP settings, including dynamic loaded tools
     report_style: str = ReportStyle.ACADEMIC.value  # Report style
     enable_deep_thinking: bool = False  # Whether to enable deep thinking
+    user_settings: dict = field(default_factory=dict)  # User settings from frontend
 
     @classmethod
     def from_runnable_config(

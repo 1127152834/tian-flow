@@ -55,6 +55,10 @@ dependencies = [
     # Text2SQL support
     "kaleido>=1.0.0rc0",
     "vanna>=0.7.0",  # 恢复vanna依赖
+    # Chart generation support
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "plotly>=5.17.0",
 ]
 
 [project.optional-dependencies]

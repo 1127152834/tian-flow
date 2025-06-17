@@ -23,25 +23,8 @@ from src.models.text2sql import TrainingSessionStatus, TrainingDataType
 
 logger = logging.getLogger(__name__)
 
-# Initialize Celery app
-celery_app = Celery(
-    'text2sql_tasks',
-    broker='redis://localhost:6380/0',
-    backend='redis://localhost:6380/0'
-)
-
-# Celery configuration
-celery_app.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
-    enable_utc=True,
-    task_track_started=True,
-    task_send_sent_event=True,
-    worker_send_task_events=True,
-    result_expires=3600,  # 1 hour
-)
+# 使用统一的Celery应用
+from ..celery_app import celery_app
 
 
 class TaskProgressManager:
@@ -76,41 +59,48 @@ class TaskProgressManager:
             logger.error(f"Failed to update progress: {e}")
     
     async def _send_websocket_update(self, data: Dict[str, Any]):
-        """Send WebSocket update via WebSocket manager"""
+        """Send WebSocket update using unified progress manager"""
         try:
-            from src.websocket.text2sql_manager import websocket_manager
+            from src.services.websocket.progress_manager import progress_ws_manager
 
-            # Extract datasource_id from session
-            session = await self.repository.get_training_session(self.session_id)
-            if session:
-                datasource_id = session.datasource_id
+            # 转换为统一的进度格式
+            progress = data.get('progress', 0)
+            message = data.get('message', '')
+            details = data.get('details', {})
 
-                # Send appropriate WebSocket message based on progress
-                if data['progress'] == 100:
-                    await websocket_manager.broadcast_training_completed(
-                        datasource_id=datasource_id,
-                        session_id=self.session_id,
-                        task_id=self.task_id,
-                        results=data.get('details', {})
-                    )
-                elif data['progress'] == -1:
-                    await websocket_manager.broadcast_training_failed(
-                        datasource_id=datasource_id,
-                        session_id=self.session_id,
-                        task_id=self.task_id,
-                        error_message=data['message']
-                    )
-                else:
-                    await websocket_manager.broadcast_training_progress(
-                        datasource_id=datasource_id,
-                        session_id=self.session_id,
-                        task_id=self.task_id,
-                        progress=data['progress'],
-                        message=data['message'],
-                        details=data.get('details')
-                    )
+            if progress == 100:
+                # 任务完成
+                await progress_ws_manager.send_task_completed(
+                    task_id=self.task_id,
+                    result={
+                        'session_id': self.session_id,
+                        'message': message,
+                        **details
+                    }
+                )
+            elif progress == -1:
+                # 任务失败
+                await progress_ws_manager.send_task_failed(
+                    task_id=self.task_id,
+                    error=message
+                )
+            else:
+                # 进度更新
+                await progress_ws_manager.send_task_progress(
+                    task_id=self.task_id,
+                    progress=progress,
+                    message=message,
+                    current_step=details.get('current_step', ''),
+                    total_steps=details.get('total_steps', 5),
+                    processed_items=details.get('processed_items', 0),
+                    total_items=details.get('total_items', 0)
+                )
+
+            logger.debug(f"WebSocket update sent: {data}")
+
         except Exception as e:
-            logger.error(f"Failed to send WebSocket update: {e}")
+            logger.warning(f"Failed to send WebSocket update: {e}")
+            # 不抛出异常，避免影响主任务
 
 
 @celery_app.task(bind=True, name='text2sql.train_model')
@@ -137,30 +127,63 @@ def train_model_task(self, datasource_id: int, session_id: int, **training_param
                 status=TrainingSessionStatus.RUNNING
             )
             
-            await progress_manager.update_progress(0, "Starting training process...")
-            
+            await progress_manager.update_progress(
+                0,
+                "Starting training process...",
+                {
+                    "current_step": "初始化",
+                    "total_steps": 5,
+                    "processed_items": 0,
+                    "total_items": 0
+                }
+            )
+
             # Step 1: Load training data
-            await progress_manager.update_progress(10, "Loading training data...")
+            await progress_manager.update_progress(
+                10,
+                "Loading training data...",
+                {
+                    "current_step": "加载训练数据",
+                    "total_steps": 5,
+                    "processed_items": 1,
+                    "total_items": 5
+                }
+            )
             training_data, _total = await repository.list_training_data(
                 datasource_id=datasource_id,
                 is_active=True,
                 limit=1000,
                 offset=0
             )
-            
+
             if not training_data:
                 raise ValueError("No training data found for this datasource")
-            
+
             await progress_manager.update_progress(
-                20, 
+                20,
                 f"Loaded {len(training_data)} training examples",
-                {"training_data_count": len(training_data)}
+                {
+                    "current_step": "数据加载完成",
+                    "total_steps": 5,
+                    "processed_items": 1,
+                    "total_items": 5,
+                    "training_data_count": len(training_data)
+                }
             )
             
             # Step 2: Generate embeddings
-            await progress_manager.update_progress(30, "Generating embeddings...")
+            await progress_manager.update_progress(
+                30,
+                "Generating embeddings...",
+                {
+                    "current_step": "生成向量嵌入",
+                    "total_steps": 5,
+                    "processed_items": 2,
+                    "total_items": 5
+                }
+            )
             embeddings_generated = 0
-            
+
             for i, data in enumerate(training_data):
                 # Generate embedding for training data
                 await vector_store.add_training_data(
@@ -174,36 +197,77 @@ def train_model_task(self, datasource_id: int, session_id: int, **training_param
                         'table_name': data.table_name
                     }
                 )
-                
+
                 embeddings_generated += 1
                 progress = 30 + int((i / len(training_data)) * 40)
-                
+
                 if i % 10 == 0:  # Update every 10 items
                     await progress_manager.update_progress(
                         progress,
-                        f"Generated embeddings: {embeddings_generated}/{len(training_data)}"
+                        f"Generated embeddings: {embeddings_generated}/{len(training_data)}",
+                        {
+                            "current_step": "生成向量嵌入",
+                            "total_steps": 5,
+                            "processed_items": embeddings_generated,
+                            "total_items": len(training_data)
+                        }
                     )
-            
+
             await progress_manager.update_progress(
                 70,
                 f"Generated {embeddings_generated} embeddings",
-                {"embeddings_generated": embeddings_generated}
+                {
+                    "current_step": "向量嵌入完成",
+                    "total_steps": 5,
+                    "processed_items": 3,
+                    "total_items": 5,
+                    "embeddings_generated": embeddings_generated
+                }
             )
             
             # Step 3: Build vector index
-            await progress_manager.update_progress(80, "Building vector index...")
+            await progress_manager.update_progress(
+                80,
+                "Building vector index...",
+                {
+                    "current_step": "构建向量索引",
+                    "total_steps": 5,
+                    "processed_items": 4,
+                    "total_items": 5
+                }
+            )
             await vector_store.build_index(datasource_id)
-            
+
             # Step 4: Validate model performance (mock)
-            await progress_manager.update_progress(90, "Validating model performance...")
+            await progress_manager.update_progress(
+                90,
+                "Validating model performance...",
+                {
+                    "current_step": "验证模型性能",
+                    "total_steps": 5,
+                    "processed_items": 4,
+                    "total_items": 5
+                }
+            )
             time.sleep(2)  # Simulate validation
-            
+
             # Calculate mock accuracy
             accuracy_score = 0.85 + (len(training_data) * 0.001)  # Mock calculation
             validation_score = accuracy_score * 0.95
-            
+
             # Step 5: Complete training
-            await progress_manager.update_progress(100, "Training completed successfully!")
+            await progress_manager.update_progress(
+                100,
+                "Training completed successfully!",
+                {
+                    "current_step": "训练完成",
+                    "total_steps": 5,
+                    "processed_items": 5,
+                    "total_items": 5,
+                    "accuracy_score": accuracy_score,
+                    "validation_score": validation_score
+                }
+            )
             
             # Update session with final results
             await repository.update_training_session(

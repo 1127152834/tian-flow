@@ -1,0 +1,60 @@
+{
+  "type": "PieChart",
+  "title": "Sales Data - PieChart Chart",
+  "width": 800,
+  "height": 400,
+  "data": [
+    {
+      "month": "January",
+      "sales": 1000,
+      "profit": 200
+    },
+    {
+      "month": "February",
+      "sales": 1200,
+      "profit": 250
+    },
+    {
+      "month": "March",
+      "sales": 1100,
+      "profit": 220
+    },
+    {
+      "month": "April",
+      "sales": 1300,
+      "profit": 280
+    },
+    {
+      "month": "May",
+      "sales": 1500,
+      "profit": 350
+    },
+    {
+      "month": "June",
+      "sales": 1400,
+      "profit": 320
+    }
+  ],
+  "margin": {
+    "top": 20,
+    "right": 30,
+    "left": 20,
+    "bottom": 5
+  },
+  "pie": {
+    "dataKey": "sales",
+    "nameKey": "month",
+    "cx": "50%",
+    "cy": "50%",
+    "outerRadius": 80,
+    "fill": "#8884d8",
+    "label": true
+  },
+  "tooltip": {
+    "active": true
+  },
+  "legend": {
+    "verticalAlign": "bottom",
+    "height": 36
+  }
+}

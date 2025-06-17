@@ -38,7 +38,7 @@ from src.services.database_datasource import DatabaseDatasourceService
 from src.services.vanna import vanna_service_manager
 # Import SQLValidator
 try:
-    from src.services.sql_validator import SQLValidator
+    from src.services.sql_validator import SQLValidator, ValidationResult
 except ImportError:
     # Fallback: create a simple validator
     class SQLValidator:
@@ -108,8 +108,20 @@ class Text2SQLService:
                 raise ValueError(f"SQL generation failed: {error_msg}")
 
             # 验证生成的SQL是否与实际数据库结构匹配
+            # 对于系统查询，跳过验证以提高性能
             validator = SQLValidator(request.datasource_id)
-            validation_result = await validator.validate_sql(vanna_result["sql"])
+            if validator._is_system_query(vanna_result["sql"]):
+                # 系统查询直接通过验证
+                validation_result = ValidationResult(
+                    is_valid=True,
+                    errors=[],
+                    warnings=[],
+                    missing_tables=[],
+                    missing_columns=[],
+                    suggestions=[]
+                )
+            else:
+                validation_result = await validator.validate_sql(vanna_result["sql"])
 
             # 如果验证失败，返回详细的错误信息和建议
             if not validation_result.is_valid:
@@ -189,52 +201,6 @@ class Text2SQLService:
             logger.error(f"Failed to generate SQL: {e}")
             raise
     
-    async def _generate_sql_with_ai(
-        self,
-        question: str,
-        datasource,
-        similar_queries: List[SQLQueryCache],
-        include_explanation: bool = False
-    ) -> Dict[str, Any]:
-        """Generate SQL using AI model (simplified implementation)"""
-        
-        # This is a simplified implementation
-        # In a real scenario, you would:
-        # 1. Get database schema from datasource
-        # 2. Use similar queries as context
-        # 3. Call AI model (OpenAI, Anthropic, etc.)
-        # 4. Parse and validate the response
-        
-        # Mock SQL generation based on question patterns
-        question_lower = question.lower()
-        
-        if "users" in question_lower:
-            if "active" in question_lower:
-                sql = "SELECT * FROM users WHERE active = true"
-            elif "count" in question_lower:
-                sql = "SELECT COUNT(*) FROM users"
-            else:
-                sql = "SELECT * FROM users"
-        elif "orders" in question_lower:
-            if "recent" in question_lower or "today" in question_lower:
-                sql = "SELECT * FROM orders WHERE created_at >= CURRENT_DATE"
-            else:
-                sql = "SELECT * FROM orders"
-        else:
-            # Generic fallback
-            sql = f"-- Generated SQL for: {question}\nSELECT 1 as result"
-        
-        result = {
-            "sql": sql,
-            "confidence": 0.85,
-            "model": "mock-gpt-4"
-        }
-        
-        if include_explanation:
-            result["explanation"] = f"This query retrieves data based on your question: '{question}'"
-        
-        return result
-    
     # SQL Execution Methods
     
     async def execute_sql(self, request: SQLExecutionRequest) -> SQLExecutionResponse:
@@ -305,23 +271,6 @@ class Text2SQLService:
                 error_message=str(e)
             )
     
-    async def _execute_sql_query(
-        self,
-        datasource,
-        sql: str,
-        limit: int
-    ) -> Tuple[List[Dict[str, Any]], int]:
-        """Execute SQL query against datasource"""
-        # This is a simplified implementation
-        # In a real scenario, you'd use the actual database connection
-        
-        # Mock result for demonstration
-        mock_result = [
-            {"id": 1, "name": "Sample Data", "created_at": "2025-06-16T10:00:00Z"},
-            {"id": 2, "name": "Another Record", "created_at": "2025-06-16T10:01:00Z"},
-        ]
-        
-        return mock_result[:limit], len(mock_result)
     
     async def _update_cache_usage(self, query: QueryHistory, execution_time: int, success: bool):
         """Update cache usage statistics"""
@@ -508,9 +457,7 @@ class Text2SQLService:
             # Start Celery task
             from src.tasks.text2sql_tasks import train_model_task
             task = train_model_task.delay(
-                datasource_id=datasource_id,
-                session_id=session_id,
-                **training_parameters or {}
+                datasource_id, session_id, **(training_parameters or {})
             )
 
             # Update session with task ID
@@ -559,8 +506,7 @@ class Text2SQLService:
             # Start Celery task
             from src.tasks.text2sql_tasks import generate_embeddings_task
             task = generate_embeddings_task.delay(
-                datasource_id=datasource_id,
-                training_data_ids=training_data_ids
+                datasource_id, training_data_ids
             )
 
             logger.info(f"Started embedding generation task {task.id} for {len(training_data_ids)} items")
@@ -1093,7 +1039,7 @@ class Text2SQLService:
         """Start cleanup task for old data"""
         try:
             from src.tasks.text2sql_tasks import cleanup_old_data_task
-            task = cleanup_old_data_task.delay(days_to_keep=days_to_keep)
+            task = cleanup_old_data_task.delay(days_to_keep)
 
             logger.info(f"Started cleanup task {task.id} for data older than {days_to_keep} days")
 

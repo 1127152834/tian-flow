@@ -3,7 +3,7 @@
 
 import { motion } from "framer-motion";
 import { FastForward, Play } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 
 import { RainbowText } from "~/components/deer-flow/rainbow-text";
 import { Button } from "~/components/ui/button";
@@ -20,6 +20,7 @@ import { useReplay } from "~/core/replay";
 import { sendMessage, useMessageIds, useStore } from "~/core/store";
 import { env } from "~/env";
 import { cn } from "~/lib/utils";
+import { nanoid } from "nanoid";
 
 import { ConversationStarter } from "./conversation-starter";
 import { InputBox } from "./input-box";
@@ -30,11 +31,69 @@ export function MessagesBlock({ className }: { className?: string }) {
   const messageIds = useMessageIds();
   const messageCount = messageIds.length;
   const responding = useStore((state) => state.responding);
+  const appendMessage = useStore((state) => state.appendMessage);
   const { isReplay } = useReplay();
   const { title: replayTitle, hasError: replayHasError } = useReplayMetadata();
   const [replayStarted, setReplayStarted] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [feedback, setFeedback] = useState<{ option: Option } | null>(null);
+  // 使用全局 WebSocket 管理器监听图表消息
+  useEffect(() => {
+    if (isReplay) return;
+
+    // 导入全局 WebSocket 管理器
+    import('~/core/websocket/chart-listener').then(({ globalWebSocketManager }) => {
+      // 订阅图表消息
+      const unsubscribe = globalWebSocketManager.subscribe('chart', (message) => {
+        if (message.chart_config) {
+          // 创建一个新的消息来显示图表
+          const chartMessage = {
+            id: nanoid(),
+            threadId: message.thread_id || 'chart_thread',
+            agent: 'data_analyst' as const,
+            role: 'assistant' as const,
+            content: `📊 **${message.chart_config.title || '数据图表'}**\n\n图表包含 ${message.data_points || 0} 个数据点。`,
+            contentChunks: [`📊 **${message.chart_config.title || '数据图表'}**\n\n图表包含 ${message.data_points || 0} 个数据点。`],
+            chartConfig: message.chart_config,
+            isStreaming: false,
+          };
+
+          appendMessage(chartMessage);
+        }
+      });
+
+      // 清理函数
+      return () => {
+        unsubscribe();
+      };
+    });
+
+    // 同时保持对自定义事件的监听（向后兼容）
+    const handleChartMessage = (event: CustomEvent) => {
+      const { chart_config, data_points, title } = event.detail;
+
+      if (chart_config) {
+        const chartMessage = {
+          id: nanoid(),
+          threadId: 'chart_thread',
+          agent: 'data_analyst' as const,
+          role: 'assistant' as const,
+          content: `📊 **${title || chart_config?.title || '数据图表'}**\n\n图表包含 ${data_points || 0} 个数据点。`,
+          contentChunks: [`📊 **${title || chart_config?.title || '数据图表'}**\n\n图表包含 ${data_points || 0} 个数据点。`],
+          chartConfig: chart_config,
+          isStreaming: false,
+        };
+
+        appendMessage(chartMessage);
+      }
+    };
+
+    window.addEventListener('chart-received', handleChartMessage as EventListener);
+
+    return () => {
+      window.removeEventListener('chart-received', handleChartMessage as EventListener);
+    };
+  }, [isReplay]);
   const handleSend = useCallback(
     async (
       message: string,

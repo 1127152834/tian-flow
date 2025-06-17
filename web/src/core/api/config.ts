@@ -1,10 +1,10 @@
-import { type DeerFlowConfig } from "../config/types";
+import { type OlightConfig } from "../config/types";
 
 import { resolveServiceURL } from "./resolve-service-url";
 
 declare global {
   interface Window {
-    __deerflowConfig: DeerFlowConfig;
+    __olightConfig: OlightConfig;
   }
 }
 
@@ -14,12 +14,12 @@ export async function loadConfig() {
   return config;
 }
 
-export function getConfig(): DeerFlowConfig {
+export function getConfig(): OlightConfig {
   if (
     typeof window === "undefined" ||
-    typeof window.__deerflowConfig === "undefined"
+    typeof window.__olightConfig === "undefined"
   ) {
     throw new Error("Config not loaded");
   }
-  return window.__deerflowConfig;
+  return window.__olightConfig;
 }

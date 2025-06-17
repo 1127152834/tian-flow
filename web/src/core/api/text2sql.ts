@@ -1,5 +1,5 @@
 /**
- * Text2SQL API client for DeerFlow
+ * Text2SQL API client for Olight
  *
  * Provides TypeScript interfaces and API functions for Text2SQL functionality
  * including SQL generation, training data management, and real-time monitoring.
@@ -395,24 +395,6 @@ export const text2sqlApi = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || 'Failed to start embedding generation');
-    }
-
-    return response.json();
-  },
-
-  async retrainModel(request: {
-    datasource_id: number;
-    force_rebuild?: boolean;
-  }): Promise<{ task_id: string; status: string; success: boolean; message?: string }> {
-    const response = await fetch(resolveServiceURL(`${API_BASE}/retrain-model`), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to start model retraining');
     }
 
     return response.json();

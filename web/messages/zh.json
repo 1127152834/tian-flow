@@ -51,15 +51,15 @@
   "landing": {
     "hero": {
       "title": "深度研究触手可及",
-      "subtitle": "认识 DeerFlow，您的个人深度研究助手。凭借搜索引擎、网络爬虫、Python 和 MCP 服务等强大工具，它能提供即时洞察、全面报告，甚至制作引人入胜的播客。",
+      "subtitle": "认识 Olight，您的个人深度研究助手。凭借搜索引擎、网络爬虫、Python 和 MCP 服务等强大工具，它能提供即时洞察、全面报告，甚至制作引人入胜的播客。",
       "getStarted": "开始使用",
       "learnMore": "了解更多",
-      "starOnGithub": "在 GitHub 上点赞",
-      "deerStandsFor": "* DEER 代表深度探索和高效研究。"
+
+      "deerStandsFor": "* Olight 为您带来智能研究能力。"
     },
     "coreFeatures": {
       "title": "核心功能",
-      "description": "了解 DeerFlow 的强大之处。",
+      "description": "了解 Olight 的强大之处。",
       "features": {
         "deeperResearch": {
           "name": "深入挖掘，广泛覆盖",
@@ -92,13 +92,13 @@
     "footer": {
       "quote": "源于开源，回馈开源。",
       "license": "基于 MIT 许可证授权",
-      "copyright": "© {year} DeerFlow"
+      "copyright": "© {year} Olight"
     }
   },
   "chat": {
     "welcome": {
       "greeting": "👋 您好！",
-      "description": "欢迎使用 🦌 DeerFlow，这是一个基于前沿语言模型构建的深度研究助手，帮助您在网络上搜索、浏览信息并处理复杂任务。"
+      "description": "欢迎使用 💡 Olight，这是一个基于前沿语言模型构建的深度研究助手，帮助您在网络上搜索、浏览信息并处理复杂任务。"
     },
     "input": {
       "placeholder": "问我任何问题...",
@@ -107,8 +107,8 @@
       "enhancePrompt": "使用 AI 增强提示",
       "deepThinking": "深度思考",
       "investigation": "调研模式",
-      "deepThinkingTooltip": "启用后，DeerFlow 将使用推理模型（{model}）生成更周全的计划。",
-      "investigationTooltip": "启用后，DeerFlow 将在制定计划前进行快速搜索。这对于与时事和新闻相关的研究很有用。",
+      "deepThinkingTooltip": "启用后，Olight 将使用推理模型（{model}）生成更周全的计划。",
+      "investigationTooltip": "启用后，Olight 将在制定计划前进行快速搜索。这对于与时事和新闻相关的研究很有用。",
       "deepThinkingMode": "深度思考模式：{status}",
       "investigationMode": "调研模式：{status}",
       "on": "开启",
@@ -150,6 +150,7 @@
       "database": "数据库",
       "text2sql": "Text2SQL",
       "apiManagement": "API 管理",
+      "resourceDiscovery": "资源发现",
       "mcp": "MCP"
     },
     "general": {
@@ -283,6 +284,112 @@
       "status": {
         "disabled": "已禁用",
         "new": "新建"
+      }
+    },
+    "resourceDiscovery": {
+      "title": "资源发现",
+      "description": "智能发现和管理系统资源，包括数据库、API、工具和Text2SQL资源。",
+      "tabs": {
+        "overview": "系统概览",
+        "resources": "资源管理",
+        "discovery": "发现测试",
+        "settings": "系统设置"
+      },
+      "overview": {
+        "title": "系统概览",
+        "description": "查看资源发现系统的整体状态和性能指标",
+        "statistics": {
+          "totalResources": "总资源数",
+          "activeResources": "活跃资源",
+          "vectorizedResources": "已向量化",
+          "avgResponseTime": "平均响应时间",
+          "successRate": "成功率",
+          "cacheHitRate": "缓存命中率"
+        },
+        "actions": {
+          "syncResources": "同步资源",
+          "refreshData": "刷新数据",
+          "viewLogs": "查看日志"
+        },
+        "charts": {
+          "resourceDistribution": "资源分布",
+          "performanceMetrics": "性能指标"
+        }
+      },
+      "resources": {
+        "title": "资源管理",
+        "description": "管理系统中发现的所有资源",
+        "searchPlaceholder": "搜索资源...",
+        "filterAll": "所有类型",
+        "filterAllStatus": "所有状态",
+        "noResults": "未找到资源",
+        "noResultsDescription": "没有资源符合您当前的筛选条件。",
+        "columns": {
+          "name": "资源名称",
+          "type": "类型",
+          "status": "状态",
+          "vectorized": "向量化状态",
+          "lastUpdated": "最后更新"
+        },
+        "actions": {
+          "vectorize": "向量化",
+          "refresh": "刷新",
+          "delete": "删除"
+        }
+      },
+      "discovery": {
+        "title": "发现测试",
+        "description": "测试资源发现功能，输入查询查看匹配结果",
+        "queryPlaceholder": "输入您的查询，例如：查询用户数据库信息",
+        "parameters": {
+          "maxResults": "最大结果数",
+          "minConfidence": "最小置信度",
+          "resourceTypes": "资源类型"
+        },
+        "presetQueries": {
+          "title": "预设查询",
+          "database": "查询数据库信息",
+          "api": "查找API接口",
+          "tools": "搜索系统工具",
+          "text2sql": "Text2SQL相关资源"
+        },
+        "results": {
+          "title": "匹配结果",
+          "noResults": "未找到匹配的资源",
+          "confidence": "置信度",
+          "type": "类型",
+          "description": "描述"
+        }
+      },
+      "settings": {
+        "title": "系统设置",
+        "description": "配置资源发现系统的参数和行为",
+        "sync": {
+          "title": "同步配置",
+          "autoSyncEnabled": "启用自动同步",
+          "syncInterval": "同步间隔（分钟）",
+          "maxConcurrentTasks": "最大并发任务数"
+        },
+        "matching": {
+          "title": "匹配参数",
+          "similarityThreshold": "相似度阈值",
+          "maxQueryResults": "查询结果限制",
+          "cacheEnabled": "启用查询缓存"
+        },
+        "performance": {
+          "title": "性能优化",
+          "vectorCacheSize": "向量缓存大小",
+          "queryTimeout": "查询超时（秒）",
+          "batchSize": "批处理大小"
+        }
+      },
+      "messages": {
+        "syncSuccess": "同步成功",
+        "syncSuccessDescription": "资源同步完成",
+        "syncFailed": "同步失败",
+        "syncFailedDescription": "资源同步失败",
+        "settingsSaved": "设置已保存",
+        "settingsSavedDescription": "系统设置已成功保存"
       }
     },
     "text2sql": {

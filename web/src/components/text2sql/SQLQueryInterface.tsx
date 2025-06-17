@@ -141,7 +141,9 @@ export default function SQLQueryInterface({ datasourceId, datasourceName }: SQLQ
   const convertToCSV = (data: Array<Record<string, any>>): string => {
     if (data.length === 0) return '';
 
-    const headers = Object.keys(data[0]);
+    const firstRow = data[0];
+    if (!firstRow) return '';
+    const headers = Object.keys(firstRow);
     const csvHeaders = headers.join(',');
     const csvRows = data.map(row => 
       headers.map(header => {
@@ -418,7 +420,7 @@ export default function SQLQueryInterface({ datasourceId, datasourceName }: SQLQ
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b">
-                            {Object.keys(executionResult.result_data[0]).map((header) => (
+                            {executionResult.result_data[0] && Object.keys(executionResult.result_data[0]).map((header) => (
                               <th key={header} className="text-left p-2 font-medium">
                                 {header}
                               </th>

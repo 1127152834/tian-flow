@@ -3,16 +3,12 @@
 
 "use client";
 
-import { GithubOutlined } from "@ant-design/icons";
-import dynamic from "next/dynamic";
-import Link from "next/link";
-import { Suspense } from "react";
 
-import { Button } from "~/components/ui/button";
+import dynamic from "next/dynamic";
+import { Suspense } from "react";
 
 import { Logo } from "~/components/deer-flow/logo";
 import { ThemeToggle } from "~/components/deer-flow/theme-toggle";
-import { Tooltip } from "~/components/deer-flow/tooltip";
 import { LanguageSwitcher } from "~/components/deer-flow/language-switcher";
 import { SettingsDialog } from "../[locale]/settings/dialogs/settings-dialog";
 
@@ -20,7 +16,7 @@ const Main = dynamic(() => import("../[locale]/chat/main"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full w-full items-center justify-center">
-      Loading DeerFlow...
+      Loading Olight...
     </div>
   ),
 });
@@ -32,16 +28,6 @@ export default function ChatPage() {
         <Logo />
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
-          <Tooltip title="Star DeerFlow on GitHub">
-            <Button variant="ghost" size="icon" asChild>
-              <Link
-                href="https://github.com/bytedance/deer-flow"
-                target="_blank"
-              >
-                <GithubOutlined />
-              </Link>
-            </Button>
-          </Tooltip>
           <ThemeToggle />
           <Suspense>
             <SettingsDialog />

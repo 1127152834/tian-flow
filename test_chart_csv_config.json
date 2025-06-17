@@ -1,0 +1,60 @@
+{
+  "type": "ScatterChart",
+  "title": "Age vs Salary",
+  "width": 800,
+  "height": 400,
+  "data": [
+    {
+      "name": "Alice",
+      "age": 25,
+      "salary": 50000
+    },
+    {
+      "name": "Bob",
+      "age": 30,
+      "salary": 60000
+    },
+    {
+      "name": "Charlie",
+      "age": 35,
+      "salary": 70000
+    },
+    {
+      "name": "Diana",
+      "age": 28,
+      "salary": 55000
+    },
+    {
+      "name": "Eve",
+      "age": 32,
+      "salary": 65000
+    }
+  ],
+  "margin": {
+    "top": 20,
+    "right": 30,
+    "left": 20,
+    "bottom": 5
+  },
+  "xAxis": {
+    "dataKey": "age",
+    "type": "number",
+    "name": "age"
+  },
+  "yAxis": {
+    "dataKey": "salary",
+    "type": "number",
+    "name": "salary"
+  },
+  "scatter": {
+    "dataKey": "salary",
+    "fill": "#8884d8"
+  },
+  "tooltip": {
+    "active": true
+  },
+  "legend": {
+    "verticalAlign": "top",
+    "height": 36
+  }
+}

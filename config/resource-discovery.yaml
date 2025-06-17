@@ -1,0 +1,57 @@
+# 资源发现配置文件
+# Resource Discovery Configuration
+
+resource_discovery:
+  # 向量化配置
+  vector_config:
+    # 相似度阈值 (0.0-1.0)
+    similarity_threshold: 0.3
+    # 最大返回结果数
+    max_results: 10
+    # 向量化批处理大小
+    batch_size: 100
+    # 向量化超时时间(秒)
+    timeout_seconds: 30
+    
+  # 资源表配置
+  resources:
+    # API工具定义表
+    - table: "api_tools.api_definitions"
+      fields: ["name", "description", "url"]
+      tool: "execute_api"
+      description: "API工具定义表 - 存储可调用的API接口信息"
+      enabled: true
+
+    # Text2SQL训练数据表
+    - table: "text2sql.vanna_embeddings"
+      fields: ["content", "sql_query", "question"]
+      tool: "text2sql_query"
+      description: "Text2SQL训练数据表 - 存储SQL查询示例和问题"
+      enabled: true
+
+    # 数据库管理配置表
+    - table: "database_management.database_datasources"
+      fields: ["name", "description", "database_type"]
+      tool: "database_query"
+      description: "数据库管理配置表 - 存储数据库连接和配置信息"
+      enabled: true
+
+  # 监听器配置
+  trigger_config:
+    # 触发器前缀
+    trigger_prefix: "rd_trigger_"
+    # 通知通道前缀
+    notify_channel_prefix: "rd_notify_"
+    # 是否启用实时监听
+    enable_realtime: true
+    # 批量处理延迟(毫秒)
+    batch_delay_ms: 1000
+    
+  # 日志配置
+  logging:
+    # 日志级别
+    level: "INFO"
+    # 是否记录详细的匹配过程
+    log_matching_details: false
+    # 是否记录向量化过程
+    log_vectorization: true

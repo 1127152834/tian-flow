@@ -8,6 +8,7 @@ Vanna AI service manager for DeerFlow
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from sqlalchemy import text
 
 from vanna.base import VannaBase
 
@@ -24,10 +25,14 @@ class VannaServiceManager:
         self._vanna_instances: Dict[str, VannaBase] = {}
         self._vector_stores: Dict[str, PgVectorStore] = {}
         self._db_adapters: Dict[int, DatabaseAdapter] = {}
-        
+
+        # Performance optimization: SQL generation cache
+        self._sql_cache: Dict[str, Dict[str, Any]] = {}
+        self._cache_ttl = 300  # 5 minutes cache TTL
+
         # Services are initialized per-instance as needed
-        
-        logger.info("✅ VannaServiceManager initialized")
+
+        logger.info("✅ VannaServiceManager initialized with performance optimizations")
     
     def _get_vanna_instance(self, datasource_id: int, embedding_model_id: Optional[int] = None) -> VannaBase:
         """Get or create Vanna instance"""
@@ -87,6 +92,12 @@ class VannaServiceManager:
 
                     logger.info(f"🤖 Generating SQL using LLM for question: {question}")
 
+                    # Fast path for common system queries
+                    fast_sql = self._try_fast_path(question)
+                    if fast_sql:
+                        logger.info(f"⚡ Using fast path for question: {question}")
+                        return fast_sql
+
                     try:
                         # Get relevant context from vector store
                         similar_sqls = self.vector_store.get_similar_question_sql(question, limit=3)
@@ -116,16 +127,26 @@ class VannaServiceManager:
                                         context_parts.append(f"SQL: {example_sql}")
                                         context_parts.append("")
 
-                        # Build the full prompt for LLM
+                        # Build the full prompt for LLM - Based on Vanna best practices
                         context = "\n".join(context_parts)
 
-                        full_prompt = f"""You are a SQL expert. Based on the provided database schema and examples, generate a SQL query for the following question.
+                        full_prompt = f"""You are a SQL expert. Generate a SQL query to answer the question based on the provided database schema and examples.
 
 {context}
 
+Instructions:
+1. Generate ONLY valid SQL code without explanations
+2. Use the exact table and column names from the schema
+3. For system queries (like counting tables), use appropriate system functions
+4. Use DATABASE() for MySQL or current_database() for PostgreSQL when needed
+5. Always ensure the SQL is executable and syntactically correct
+6. Use proper JOINs when querying multiple tables
+7. Include appropriate WHERE clauses to filter data when needed
+8. Use LIMIT clause for large result sets when appropriate
+
 Question: {question}
 
-Generate only the SQL query, no explanations. The query should be syntactically correct and follow best practices."""
+SQL:"""
 
                         # Use the LLM to generate SQL
                         try:
@@ -182,6 +203,55 @@ Generate only the SQL query, no explanations. The query should be syntactically 
                     except Exception as e:
                         logger.error(f"Failed to generate SQL: {e}")
                         return "SELECT 1 as result -- Error generating SQL"
+
+                def _try_fast_path(self, question: str) -> Optional[str]:
+                    """Try to generate SQL using fast path for common queries"""
+                    question_lower = question.lower().strip()
+
+                    logger.info(f"🚀 Trying fast path for question: {question_lower}")
+
+                    # Common system queries - more comprehensive patterns
+                    table_count_patterns = [
+                        '多少张表', '多少个表', '表的数量', '表数量', '有多少表',
+                        'how many tables', 'count tables', 'table count',
+                        '现在有多少张表', '查询.*多少张表', '查询.*表.*数量'
+                    ]
+
+                    for pattern in table_count_patterns:
+                        if pattern in question_lower or (pattern.startswith('查询') and any(p in question_lower for p in pattern.split('.*'))):
+                            logger.info(f"⚡ Fast path matched table count pattern: {pattern}")
+                            return "SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = DATABASE();"
+
+                    # List all tables
+                    if any(phrase in question_lower for phrase in ['所有表', '全部表', 'all tables', 'list tables', '表列表', '显示所有表']):
+                        logger.info("⚡ Fast path matched list tables pattern")
+                        return "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name;"
+
+                    # Database name
+                    if any(phrase in question_lower for phrase in ['数据库名', 'database name', '当前数据库']):
+                        logger.info("⚡ Fast path matched database name pattern")
+                        return "SELECT DATABASE() as database_name;"
+
+                    # Common count queries with specific patterns
+                    import re
+
+                    # Pattern: "表名 + 多少条记录/数据"
+                    count_patterns = [
+                        r'(\w+).*?(?:多少条|多少个|多少|数量|count)',
+                        r'(?:count|数量|多少).*?(\w+).*?(?:记录|数据|条|个)',
+                    ]
+
+                    for pattern in count_patterns:
+                        match = re.search(pattern, question_lower)
+                        if match:
+                            table_candidate = match.group(1)
+                            # Simple validation - if it looks like a table name
+                            if len(table_candidate) > 2 and not table_candidate in ['多少', 'count', '数量', '记录', '数据', '查询', '现在']:
+                                logger.info(f"⚡ Fast path matched count pattern for table: {table_candidate}")
+                                return f"SELECT COUNT(*) as record_count FROM `{table_candidate}`;"
+
+                    logger.info("❌ No fast path pattern matched")
+                    return None
 
                 def _generate_fallback_sql(self, question: str, similar_sqls: List, similar_ddls: List) -> str:
                     """Generate SQL using fallback logic when LLM fails"""
@@ -333,22 +403,183 @@ Generate only the SQL query, no explanations. The query should be syntactically 
                 
                 def get_schema(self, **kwargs) -> str:
                     """Get database schema as string"""
-                    # Return mock schema for now
-                    schema_str = """Table: users
+                    try:
+                        logger.info("Getting real database schema...")
+
+                        # Get database schema using the database adapter
+                        import asyncio
+
+                        # Create event loop if needed
+                        try:
+                            loop = asyncio.get_event_loop()
+                        except RuntimeError:
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+
+                        # Get schema information
+                        if loop.is_running():
+                            # Use sync method if loop is running
+                            schema_info = self._get_schema_sync()
+                        else:
+                            # Use async method if no loop is running
+                            schema_info = loop.run_until_complete(self.db_adapter.get_database_schema())
+
+                        # Format schema as string
+                        schema_str = self._format_schema_string(schema_info)
+
+                        logger.info(f"Retrieved schema for {len(schema_info)} tables")
+                        return schema_str
+
+                    except Exception as e:
+                        logger.error(f"Failed to get database schema: {e}")
+                        # Fallback to basic schema
+                        return self._get_fallback_schema()
+
+                def _get_schema_sync(self) -> List[Dict[str, Any]]:
+                    """Get database schema synchronously"""
+                    try:
+                        # Use the database adapter's sync methods
+                        datasource = self.db_adapter._get_datasource_sync()
+                        engine = self.db_adapter._get_engine_sync(datasource)
+
+                        schema_info = []
+
+                        # Get table names first
+                        if datasource.database_type.value == "MYSQL":
+                            query = text("""
+                                SELECT TABLE_NAME
+                                FROM INFORMATION_SCHEMA.TABLES
+                                WHERE TABLE_SCHEMA = :database_name
+                                AND TABLE_TYPE = 'BASE TABLE'
+                            """)
+                        elif datasource.database_type.value == "POSTGRESQL":
+                            query = text("""
+                                SELECT table_name
+                                FROM information_schema.tables
+                                WHERE table_catalog = :database_name
+                                AND table_type = 'BASE TABLE'
+                                AND table_schema = 'public'
+                            """)
+                        else:
+                            raise ValueError(f"Unsupported database type: {datasource.database_type}")
+
+                        with engine.connect() as conn:
+                            result = conn.execute(query, {'database_name': datasource.database_name})
+                            table_names = [row[0] for row in result.fetchall()]
+
+                        # Get schema for each table
+                        for table_name in table_names[:10]:  # Limit to first 10 tables
+                            try:
+                                table_schema = self._get_table_schema_sync(engine, datasource, table_name)
+                                if table_schema:
+                                    schema_info.append(table_schema)
+                            except Exception as e:
+                                logger.warning(f"Failed to get schema for table {table_name}: {e}")
+                                continue
+
+                        return schema_info
+
+                    except Exception as e:
+                        logger.error(f"Failed to get schema synchronously: {e}")
+                        return []
+
+                def _get_table_schema_sync(self, engine, datasource, table_name: str) -> Dict[str, Any]:
+                    """Get table schema synchronously"""
+                    try:
+                        if datasource.database_type.value == "MYSQL":
+                            query = text("""
+                                SELECT
+                                    COLUMN_NAME as column_name,
+                                    DATA_TYPE as data_type,
+                                    IS_NULLABLE as is_nullable,
+                                    COLUMN_DEFAULT as column_default,
+                                    COLUMN_COMMENT as column_comment
+                                FROM INFORMATION_SCHEMA.COLUMNS
+                                WHERE TABLE_SCHEMA = :database_name
+                                AND TABLE_NAME = :table_name
+                                ORDER BY ORDINAL_POSITION
+                            """)
+                        elif datasource.database_type.value == "POSTGRESQL":
+                            query = text("""
+                                SELECT
+                                    column_name,
+                                    data_type,
+                                    is_nullable,
+                                    column_default
+                                FROM information_schema.columns
+                                WHERE table_catalog = :database_name
+                                AND table_name = :table_name
+                                ORDER BY ordinal_position
+                            """)
+                        else:
+                            return None
+
+                        with engine.connect() as conn:
+                            result = conn.execute(query, {
+                                'database_name': datasource.database_name,
+                                'table_name': table_name
+                            })
+
+                            columns = []
+                            for row in result.fetchall():
+                                if datasource.database_type.value == "MYSQL":
+                                    columns.append({
+                                        'name': row[0],
+                                        'type': row[1],
+                                        'nullable': row[2] == 'YES',
+                                        'default': row[3],
+                                        'comment': row[4]
+                                    })
+                                else:  # PostgreSQL
+                                    columns.append({
+                                        'name': row[0],
+                                        'type': row[1],
+                                        'nullable': row[2] == 'YES',
+                                        'default': row[3],
+                                        'comment': None
+                                    })
+
+                            return {
+                                'table_name': table_name,
+                                'columns': columns
+                            }
+
+                    except Exception as e:
+                        logger.error(f"Failed to get table schema for {table_name}: {e}")
+                        return None
+
+                def _format_schema_string(self, schema_info: List[Dict[str, Any]]) -> str:
+                    """Format schema information as string"""
+                    if not schema_info:
+                        return self._get_fallback_schema()
+
+                    schema_parts = []
+                    for table_info in schema_info:
+                        table_name = table_info.get('table_name', 'unknown')
+                        columns = table_info.get('columns', [])
+
+                        schema_parts.append(f"Table: {table_name}")
+                        for col in columns:
+                            col_name = col.get('name', 'unknown')
+                            col_type = col.get('type', 'unknown')
+                            nullable = " (nullable)" if col.get('nullable') else ""
+                            comment = f" -- {col.get('comment')}" if col.get('comment') else ""
+                            schema_parts.append(f"  {col_name} ({col_type}){nullable}{comment}")
+                        schema_parts.append("")  # Empty line between tables
+
+                    return "\n".join(schema_parts)
+
+                def _get_fallback_schema(self) -> str:
+                    """Get fallback schema when real schema retrieval fails"""
+                    return """-- Database schema unavailable
+-- Please ensure database connection is properly configured
+
+Table: example_table
   id (INTEGER)
   name (VARCHAR)
-  email (VARCHAR)
-  created_at (TIMESTAMP)
-
-Table: orders
-  id (INTEGER)
-  user_id (INTEGER)
-  amount (DECIMAL)
   created_at (TIMESTAMP)
 
 """
-                    logger.info("Returning mock database schema")
-                    return schema_str
             
             # Create configuration
             config = db_adapter.to_vanna_config()
@@ -376,6 +607,14 @@ Table: orders
         """
         try:
             start_time = datetime.utcnow()
+
+            # Check cache first for performance
+            cache_key = f"{datasource_id}_{question.strip().lower()}"
+            cached_result = self._get_cached_sql(cache_key)
+            if cached_result:
+                logger.info(f"⚡ Using cached SQL for question: {question[:50]}...")
+                cached_result['generation_time'] = 0.001  # Very fast cache hit
+                return cached_result
 
             # Get Vanna instance
             vanna_instance = self._get_vanna_instance(datasource_id, embedding_model_id)
@@ -415,7 +654,7 @@ Table: orders
                 # Calculate generation time
                 generation_time = (datetime.utcnow() - start_time).total_seconds()
 
-                return {
+                result = {
                     "success": True,
                     "sql": sql,
                     "question": question,
@@ -424,6 +663,11 @@ Table: orders
                     "generation_time": generation_time,
                     "generated_at": start_time.isoformat()
                 }
+
+                # Cache the result for future use
+                self._cache_sql_result(cache_key, result)
+
+                return result
 
             except Exception as vanna_error:
                 logger.warning(f"Vanna generate_sql failed: {vanna_error}, trying fallback approach")
@@ -777,7 +1021,55 @@ Table: orders
 
         except Exception:
             return 0.5
-    
+
+    def _get_cached_sql(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Get cached SQL result if available and not expired"""
+        try:
+            import time
+            current_time = time.time()
+
+            if cache_key in self._sql_cache:
+                cached_data = self._sql_cache[cache_key]
+                cache_time = cached_data.get('cache_time', 0)
+
+                # Check if cache is still valid
+                if current_time - cache_time < self._cache_ttl:
+                    return cached_data.get('result')
+                else:
+                    # Remove expired cache
+                    del self._sql_cache[cache_key]
+
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get cached SQL: {e}")
+            return None
+
+    def _cache_sql_result(self, cache_key: str, result: Dict[str, Any]):
+        """Cache SQL generation result"""
+        try:
+            import time
+            current_time = time.time()
+
+            # Only cache successful results
+            if result.get('success'):
+                self._sql_cache[cache_key] = {
+                    'result': result.copy(),
+                    'cache_time': current_time
+                }
+
+                # Clean up old cache entries (keep only last 100)
+                if len(self._sql_cache) > 100:
+                    # Remove oldest entries
+                    sorted_items = sorted(
+                        self._sql_cache.items(),
+                        key=lambda x: x[1].get('cache_time', 0)
+                    )
+                    for old_key, _ in sorted_items[:20]:  # Remove oldest 20
+                        del self._sql_cache[old_key]
+
+        except Exception as e:
+            logger.error(f"Failed to cache SQL result: {e}")
+
     def clear_cache(self, datasource_id: Optional[int] = None):
         """Clear cache"""
         if datasource_id:
@@ -787,12 +1079,19 @@ Table: orders
                 self._vanna_instances.pop(key, None)
                 self._vector_stores.pop(key, None)
             self._db_adapters.pop(datasource_id, None)
+
+            # Clear SQL cache for specific datasource
+            sql_keys_to_remove = [k for k in self._sql_cache.keys() if k.startswith(f"{datasource_id}_")]
+            for key in sql_keys_to_remove:
+                self._sql_cache.pop(key, None)
+
             logger.info(f"✅ Cleared cache for datasource {datasource_id}")
         else:
             # Clear all cache
             self._vanna_instances.clear()
             self._vector_stores.clear()
             self._db_adapters.clear()
+            self._sql_cache.clear()
             logger.info("✅ Cleared all Vanna cache")
 
 

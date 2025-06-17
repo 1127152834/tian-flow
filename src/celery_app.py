@@ -15,8 +15,14 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Create Celery app
-celery_app = Celery('deer_flow')
+# Create Celery app with include parameter
+celery_app = Celery(
+    'deer_flow',
+    include=[
+        'src.tasks.text2sql_tasks',
+        'src.tasks.resource_discovery_tasks',
+    ]
+)
 
 # Configuration
 celery_app.conf.update(
@@ -36,6 +42,7 @@ celery_app.conf.update(
         'text2sql.*': {'queue': 'text2sql'},
         'database.*': {'queue': 'database'},
         'cleanup.*': {'queue': 'cleanup'},
+        'resource_discovery.*': {'queue': 'resource_discovery'},
     },
     
     # Worker settings
@@ -69,10 +76,8 @@ celery_app.conf.update(
     },
 )
 
-# Auto-discover tasks
-celery_app.autodiscover_tasks([
-    'src.tasks.text2sql_tasks',
-])
+# Auto-discover tasks (already included above)
+celery_app.autodiscover_tasks()
 
 # Task annotations for monitoring
 celery_app.conf.task_annotations = {
@@ -91,6 +96,15 @@ celery_app.conf.task_annotations = {
     'text2sql.cleanup_old_data': {
         'rate_limit': '1/h',    # 1 cleanup task per hour
         'time_limit': 3600,     # 1 hour
+    },
+    'resource_discovery.sync_resources': {
+        'rate_limit': '2/h',    # 2 sync tasks per hour
+        'time_limit': 1800,     # 30 minutes
+        'soft_time_limit': 1500, # 25 minutes
+    },
+    'resource_discovery.vectorize_resources': {
+        'rate_limit': '10/m',   # 10 vectorization tasks per minute
+        'time_limit': 900,      # 15 minutes
     },
 }
 

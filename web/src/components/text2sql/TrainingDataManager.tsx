@@ -48,6 +48,11 @@ export function TrainingDataManager({ datasourceId, datasourceName }: TrainingDa
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<TrainingDataResponse | null>(null);
   const [isRetraining, setIsRetraining] = useState(false);
+  const [retrainTaskId, setRetrainTaskId] = useState<string | null>(null);
+  const [retrainProgress, setRetrainProgress] = useState(0);
+  const [retrainMessage, setRetrainMessage] = useState('');
+  const [retrainStep, setRetrainStep] = useState('');
+  const [websocket, setWebsocket] = useState<WebSocket | null>(null);
 
   // Confirm dialog hook
   const { showConfirm, ConfirmDialog } = useConfirmDialog();
@@ -58,6 +63,126 @@ export function TrainingDataManager({ datasourceId, datasourceName }: TrainingDa
   useEffect(() => {
     loadTrainingData();
   }, [datasourceId]);
+
+  // WebSocket连接管理
+  const connectWebSocket = (taskId: string) => {
+    // 关闭现有连接
+    if (websocket) {
+      websocket.close();
+    }
+
+    // 创建新的WebSocket连接
+    const wsUrl = `ws://localhost:8000/api/ws/progress/${taskId}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('Text2SQL WebSocket连接已建立:', taskId);
+      setWebsocket(ws);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('收到Text2SQL WebSocket消息:', data);
+
+        // 更新进度信息
+        setRetrainProgress(data.progress || 0);
+        setRetrainMessage(data.message || '');
+        setRetrainStep(data.current_step || '');
+
+        if (data.status === 'completed') {
+          setIsRetraining(false);
+          setRetrainTaskId(null);
+          setRetrainProgress(100);
+          setRetrainMessage('训练完成');
+          showSuccess(
+            "模型训练完成",
+            "所有训练数据的向量嵌入已重新生成完成。",
+            { autoClose: true, autoCloseDelay: 5000 }
+          );
+          loadTrainingData(); // 重新加载数据
+          ws.close();
+        } else if (data.status === 'failed') {
+          setIsRetraining(false);
+          setRetrainTaskId(null);
+          setRetrainProgress(0);
+          setRetrainMessage('训练失败');
+          setError(data.error || '训练过程中发生错误');
+          ws.close();
+        }
+      } catch (error) {
+        console.error('解析Text2SQL WebSocket消息失败:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('Text2SQL WebSocket错误:', error);
+      // 回退到轮询方式
+      fallbackToPolling(taskId);
+    };
+
+    ws.onclose = () => {
+      console.log('Text2SQL WebSocket连接已关闭');
+      setWebsocket(null);
+    };
+  };
+
+  // 回退到轮询方式
+  const fallbackToPolling = (taskId: string) => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/text2sql/task/status/${taskId}`);
+        if (response.ok) {
+          const taskStatus = await response.json();
+
+          setRetrainProgress(taskStatus.progress || 0);
+          setRetrainMessage(taskStatus.message || '');
+          setRetrainStep(taskStatus.current_step || '');
+
+          if (taskStatus.status === 'completed') {
+            setIsRetraining(false);
+            setRetrainTaskId(null);
+            setRetrainProgress(100);
+            setRetrainMessage('训练完成');
+            showSuccess(
+              "模型训练完成",
+              "所有训练数据的向量嵌入已重新生成完成。",
+              { autoClose: true, autoCloseDelay: 5000 }
+            );
+            loadTrainingData();
+            clearInterval(interval);
+          } else if (taskStatus.status === 'failed') {
+            setIsRetraining(false);
+            setRetrainTaskId(null);
+            setRetrainProgress(0);
+            setRetrainMessage('训练失败');
+            setError(taskStatus.error || '训练过程中发生错误');
+            clearInterval(interval);
+          }
+        }
+      } catch (error) {
+        console.error('轮询检查Text2SQL任务状态失败:', error);
+      }
+    }, 2000);
+
+    // 清理函数
+    setTimeout(() => clearInterval(interval), 300000); // 5分钟后停止轮询
+  };
+
+  // 监控训练任务进度
+  useEffect(() => {
+    if (retrainTaskId && isRetraining) {
+      // 优先使用WebSocket
+      connectWebSocket(retrainTaskId);
+    }
+
+    // 清理函数
+    return () => {
+      if (websocket) {
+        websocket.close();
+      }
+    };
+  }, [retrainTaskId, isRetraining]);
 
   const loadTrainingData = async () => {
     try {
@@ -149,23 +274,28 @@ export function TrainingDataManager({ datasourceId, datasourceName }: TrainingDa
         try {
           setIsRetraining(true);
           setError(null);
+          setRetrainProgress(0);
+          setRetrainMessage('启动训练任务...');
+          setRetrainStep('');
 
-          const result = await text2sqlApi.retrainModel({
-            datasource_id: datasourceId,
-            force_rebuild: true
-          });
+          const result = await text2sqlApi.retrainModel(datasourceId, true);
 
-          // Show success message
+          // 设置任务ID以开始监控
+          setRetrainTaskId(result.task_id);
+
+          // Show initial success message
           showSuccess(
             "重新训练已开始",
             `任务ID: ${result.task_id}。系统正在后台重新生成向量嵌入，请稍候。`,
-            { autoClose: true, autoCloseDelay: 5000 }
+            { autoClose: true, autoCloseDelay: 3000 }
           );
 
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to start retraining');
-        } finally {
           setIsRetraining(false);
+          setRetrainProgress(0);
+          setRetrainMessage('');
+          setRetrainStep('');
         }
       }
     });
@@ -249,6 +379,37 @@ export function TrainingDataManager({ datasourceId, datasourceName }: TrainingDa
                 )}
                 {isRetraining ? '重新训练中...' : '重新训练模型'}
               </Button>
+
+              {/* 训练进度显示 */}
+              {isRetraining && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                      <span className="text-xs text-blue-800 font-medium">
+                        模型训练进行中...
+                      </span>
+                    </div>
+
+                    {/* 进度条 */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-blue-700">
+                        <span>{retrainStep || '准备中...'}</span>
+                        <span>{retrainProgress}%</span>
+                      </div>
+                      <div className="w-full bg-blue-200 rounded-full h-1.5">
+                        <div
+                          className="bg-blue-600 h-1.5 rounded-full transition-all duration-300 ease-out"
+                          style={{ width: `${retrainProgress}%` }}
+                        ></div>
+                      </div>
+                      {retrainMessage && (
+                        <p className="text-xs text-blue-600 mt-1">{retrainMessage}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -346,10 +507,17 @@ export function TrainingDataManager({ datasourceId, datasourceName }: TrainingDa
                           )}
                           
                           <div className="text-xs font-mono bg-muted p-2 rounded">
-                            {item.content.length > 200 
-                              ? `${item.content.substring(0, 200)}...` 
-                              : item.content
-                            }
+                            {item.content_type === 'SQL' && item.sql_query ? (
+                              // 对于 SQL 类型，优先显示 sql_query 字段
+                              item.sql_query.length > 200
+                                ? `${item.sql_query.substring(0, 200)}...`
+                                : item.sql_query
+                            ) : (
+                              // 其他类型显示 content 字段
+                              item.content.length > 200
+                                ? `${item.content.substring(0, 200)}...`
+                                : item.content
+                            )}
                           </div>
                           
                           {item.table_names && item.table_names.length > 0 && (

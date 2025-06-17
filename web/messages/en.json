@@ -51,11 +51,11 @@
   "landing": {
     "hero": {
       "title": "Deep Research at Your Fingertips",
-      "subtitle": "Meet DeerFlow, your personal Deep Research assistant. With powerful tools like search engines, web crawlers, Python and MCP services, it delivers instant insights, comprehensive reports, and even captivating podcasts.",
+      "subtitle": "Meet Olight, your personal Deep Research assistant. With powerful tools like search engines, web crawlers, Python and MCP services, it delivers instant insights, comprehensive reports, and even captivating podcasts.",
       "getStarted": "Get Started",
       "learnMore": "Learn More",
-      "starOnGithub": "Star on GitHub",
-      "deerStandsFor": "* DEER stands for Deep Exploration and Efficient Research."
+
+      "deerStandsFor": "* Olight brings you intelligent research capabilities."
     },
     "coreFeatures": {
       "title": "Core Features",
@@ -92,13 +92,13 @@
     "footer": {
       "quote": "Originated from Open Source, give back to Open Source.",
       "license": "Licensed under MIT License",
-      "copyright": "© {year} DeerFlow"
+      "copyright": "© {year} Olight"
     }
   },
   "chat": {
     "welcome": {
       "greeting": "👋 Hello, there!",
-      "description": "Welcome to 🦌 DeerFlow, a deep research assistant built on cutting-edge language models, helps you search on web, browse information, and handle complex tasks."
+      "description": "Welcome to 💡 Olight, a deep research assistant built on cutting-edge language models, helps you search on web, browse information, and handle complex tasks."
     },
     "input": {
       "placeholder": "Ask me anything...",
@@ -150,6 +150,7 @@
       "database": "Database",
       "text2sql": "Text2SQL",
       "apiManagement": "API Management",
+      "resourceDiscovery": "Resource Discovery",
       "mcp": "MCP"
     },
     "general": {
@@ -283,6 +284,112 @@
       "status": {
         "disabled": "Disabled",
         "new": "New"
+      }
+    },
+    "resourceDiscovery": {
+      "title": "Resource Discovery",
+      "description": "Intelligently discover and manage system resources including databases, APIs, tools, and Text2SQL resources.",
+      "tabs": {
+        "overview": "System Overview",
+        "resources": "Resource Management",
+        "discovery": "Discovery Testing",
+        "settings": "System Settings"
+      },
+      "overview": {
+        "title": "System Overview",
+        "description": "View overall status and performance metrics of the resource discovery system",
+        "statistics": {
+          "totalResources": "Total Resources",
+          "activeResources": "Active Resources",
+          "vectorizedResources": "Vectorized",
+          "avgResponseTime": "Avg Response Time",
+          "successRate": "Success Rate",
+          "cacheHitRate": "Cache Hit Rate"
+        },
+        "actions": {
+          "syncResources": "Sync Resources",
+          "refreshData": "Refresh Data",
+          "viewLogs": "View Logs"
+        },
+        "charts": {
+          "resourceDistribution": "Resource Distribution",
+          "performanceMetrics": "Performance Metrics"
+        }
+      },
+      "resources": {
+        "title": "Resource Management",
+        "description": "Manage all discovered resources in the system",
+        "searchPlaceholder": "Search resources...",
+        "filterAll": "All Types",
+        "filterAllStatus": "All Status",
+        "noResults": "No resources found",
+        "noResultsDescription": "No resources match your current filters.",
+        "columns": {
+          "name": "Resource Name",
+          "type": "Type",
+          "status": "Status",
+          "vectorized": "Vectorization Status",
+          "lastUpdated": "Last Updated"
+        },
+        "actions": {
+          "vectorize": "Vectorize",
+          "refresh": "Refresh",
+          "delete": "Delete"
+        }
+      },
+      "discovery": {
+        "title": "Discovery Testing",
+        "description": "Test resource discovery functionality by entering queries to see matching results",
+        "queryPlaceholder": "Enter your query, e.g.: find user database information",
+        "parameters": {
+          "maxResults": "Max Results",
+          "minConfidence": "Min Confidence",
+          "resourceTypes": "Resource Types"
+        },
+        "presetQueries": {
+          "title": "Preset Queries",
+          "database": "Find database information",
+          "api": "Search API interfaces",
+          "tools": "Search system tools",
+          "text2sql": "Text2SQL related resources"
+        },
+        "results": {
+          "title": "Matching Results",
+          "noResults": "No matching resources found",
+          "confidence": "Confidence",
+          "type": "Type",
+          "description": "Description"
+        }
+      },
+      "settings": {
+        "title": "System Settings",
+        "description": "Configure resource discovery system parameters and behavior",
+        "sync": {
+          "title": "Sync Configuration",
+          "autoSyncEnabled": "Enable Auto Sync",
+          "syncInterval": "Sync Interval (minutes)",
+          "maxConcurrentTasks": "Max Concurrent Tasks"
+        },
+        "matching": {
+          "title": "Matching Parameters",
+          "similarityThreshold": "Similarity Threshold",
+          "maxQueryResults": "Query Result Limit",
+          "cacheEnabled": "Enable Query Cache"
+        },
+        "performance": {
+          "title": "Performance Optimization",
+          "vectorCacheSize": "Vector Cache Size",
+          "queryTimeout": "Query Timeout (seconds)",
+          "batchSize": "Batch Size"
+        }
+      },
+      "messages": {
+        "syncSuccess": "Sync Successful",
+        "syncSuccessDescription": "Resource synchronization completed",
+        "syncFailed": "Sync Failed",
+        "syncFailedDescription": "Resource synchronization failed",
+        "settingsSaved": "Settings Saved",
+        "settingsSavedDescription": "System settings saved successfully"
       }
     },
     "text2sql": {

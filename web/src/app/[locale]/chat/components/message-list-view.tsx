@@ -14,6 +14,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 
 import { LoadingAnimation } from "~/components/deer-flow/loading-animation";
 import { Markdown } from "~/components/deer-flow/markdown";
+import { EnhancedMarkdown } from "~/components/deer-flow/enhanced-markdown";
 import { RainbowText } from "~/components/deer-flow/rainbow-text";
 import { RollingText } from "~/components/deer-flow/rolling-text";
 import {
@@ -34,6 +35,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "~/components/ui/collapsible";
+import ChartRenderer from "~/components/ui/chart-renderer";
 import type { Message, Option } from "~/core/messages";
 import {
   closeResearch,
@@ -144,6 +146,7 @@ function MessageListItem({
       message.agent === "coordinator" ||
       message.agent === "planner" ||
       message.agent === "podcast" ||
+      message.agent === "data_analyst" ||
       startOfResearch
     ) {
       let content: React.ReactNode;
@@ -175,7 +178,7 @@ function MessageListItem({
           </div>
         );
       } else {
-        content = message.content ? (
+        content = message.content || message.chartConfig ? (
           <div
             className={cn(
               "flex w-full px-4",
@@ -185,14 +188,21 @@ function MessageListItem({
           >
             <MessageBubble message={message}>
               <div className="flex w-full flex-col text-wrap break-words">
-                <Markdown
-                  className={cn(
-                    message.role === "user" &&
-                      "prose-invert not-dark:text-secondary dark:text-inherit",
-                  )}
-                >
-                  {message?.content}
-                </Markdown>
+                {message.content && (
+                  <EnhancedMarkdown
+                    className={cn(
+                      message.role === "user" &&
+                        "prose-invert not-dark:text-secondary dark:text-inherit",
+                    )}
+                  >
+                    {message?.content}
+                  </EnhancedMarkdown>
+                )}
+                {message.chartConfig && (
+                  <div className="mt-4">
+                    <ChartRenderer config={message.chartConfig} />
+                  </div>
+                )}
               </div>
             </MessageBubble>
           </div>
@@ -394,7 +404,7 @@ function ThoughtBlock({
                   scrollShadow={false}
                   autoScrollToBottom
                 >
-                  <Markdown
+                  <EnhancedMarkdown
                     className={cn(
                       "prose dark:prose-invert max-w-none transition-colors duration-200",
                       isStreaming ? "prose-primary" : "opacity-80",
@@ -402,7 +412,7 @@ function ThoughtBlock({
                     animated={isStreaming}
                   >
                     {content}
-                  </Markdown>
+                  </EnhancedMarkdown>
                 </ScrollContainer>
               </div>
             </CardContent>

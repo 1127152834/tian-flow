@@ -3,25 +3,42 @@
 -- 为资源发现模块创建数据库触发器，实现实时更新
 -- =====================================================
 
--- 1. 创建通知函数
+-- 1. 创建通知函数（优化版本，避免 payload 过长）
 CREATE OR REPLACE FUNCTION resource_discovery.notify_resource_change()
 RETURNS TRIGGER AS $$
+DECLARE
+    payload_text TEXT;
+    record_id_val INTEGER;
 BEGIN
-    -- 发送通知到资源发现模块
-    PERFORM pg_notify(
-        'resource_change',
-        json_build_object(
+    -- 获取记录ID
+    record_id_val := CASE
+        WHEN TG_OP = 'DELETE' THEN OLD.id
+        ELSE NEW.id
+    END;
+
+    -- 构建简化的通知载荷（避免包含完整记录数据）
+    payload_text := json_build_object(
+        'operation', TG_OP,
+        'table_name', TG_TABLE_NAME,
+        'schema_name', TG_TABLE_SCHEMA,
+        'record_id', record_id_val,
+        'timestamp', EXTRACT(EPOCH FROM NOW())
+    )::text;
+
+    -- 检查 payload 长度，如果太长则截断
+    IF LENGTH(payload_text) > 7000 THEN
+        payload_text := json_build_object(
             'operation', TG_OP,
             'table_name', TG_TABLE_NAME,
-            'schema_name', TG_TABLE_SCHEMA,
-            'record_id', CASE 
-                WHEN TG_OP = 'DELETE' THEN OLD.id
-                ELSE NEW.id
-            END,
-            'timestamp', EXTRACT(EPOCH FROM NOW())
-        )::text
-    );
-    
+            'record_id', record_id_val,
+            'timestamp', EXTRACT(EPOCH FROM NOW()),
+            'truncated', true
+        )::text;
+    END IF;
+
+    -- 发送通知到资源发现模块
+    PERFORM pg_notify('resource_change', payload_text);
+
     -- 返回适当的记录
     IF TG_OP = 'DELETE' THEN
         RETURN OLD;
@@ -47,13 +64,86 @@ CREATE TRIGGER trigger_api_definition_change
     FOR EACH ROW
     EXECUTE FUNCTION resource_discovery.notify_resource_change();
 
--- 4. 为 vanna_embeddings 表创建触发器
+-- 4. 为 vanna_embeddings 表创建专门的触发器函数（处理大数据）
+CREATE OR REPLACE FUNCTION resource_discovery.notify_vanna_embedding_change()
+RETURNS TRIGGER AS $$
+DECLARE
+    payload_text TEXT;
+    record_id_val INTEGER;
+    content_preview TEXT;
+    question_preview TEXT;
+    sql_preview TEXT;
+BEGIN
+    -- 获取记录ID
+    record_id_val := CASE
+        WHEN TG_OP = 'DELETE' THEN OLD.id
+        ELSE NEW.id
+    END;
+
+    -- 为大字段创建预览（截取前100个字符）
+    IF TG_OP != 'DELETE' THEN
+        content_preview := LEFT(COALESCE(NEW.content, ''), 100);
+        question_preview := LEFT(COALESCE(NEW.question, ''), 100);
+        sql_preview := LEFT(COALESCE(NEW.sql_query, ''), 100);
+    ELSE
+        content_preview := LEFT(COALESCE(OLD.content, ''), 100);
+        question_preview := LEFT(COALESCE(OLD.question, ''), 100);
+        sql_preview := LEFT(COALESCE(OLD.sql_query, ''), 100);
+    END IF;
+
+    -- 构建简化的通知载荷（只包含关键信息和预览）
+    payload_text := json_build_object(
+        'operation', TG_OP,
+        'table_name', 'text2sql.vanna_embeddings',
+        'record_id', record_id_val,
+        'datasource_id', CASE
+            WHEN TG_OP = 'DELETE' THEN OLD.datasource_id
+            ELSE NEW.datasource_id
+        END,
+        'content_type', CASE
+            WHEN TG_OP = 'DELETE' THEN OLD.content_type
+            ELSE NEW.content_type
+        END,
+        'content_preview', content_preview,
+        'question_preview', question_preview,
+        'sql_preview', sql_preview,
+        'timestamp', EXTRACT(EPOCH FROM NOW())
+    )::text;
+
+    -- 最终长度检查，如果仍然太长则进一步简化
+    IF LENGTH(payload_text) > 7000 THEN
+        payload_text := json_build_object(
+            'operation', TG_OP,
+            'table_name', 'text2sql.vanna_embeddings',
+            'record_id', record_id_val,
+            'datasource_id', CASE
+                WHEN TG_OP = 'DELETE' THEN OLD.datasource_id
+                ELSE NEW.datasource_id
+            END,
+            'timestamp', EXTRACT(EPOCH FROM NOW()),
+            'truncated', true
+        )::text;
+    END IF;
+
+    -- 发送通知
+    PERFORM pg_notify('rd_notify_text2sql_vanna_embeddings', payload_text);
+
+    -- 返回适当的记录
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 为 vanna_embeddings 表创建触发器
 DROP TRIGGER IF EXISTS trigger_vanna_embedding_change ON text2sql.vanna_embeddings;
 CREATE TRIGGER trigger_vanna_embedding_change
     AFTER INSERT OR UPDATE OR DELETE
     ON text2sql.vanna_embeddings
     FOR EACH ROW
-    EXECUTE FUNCTION resource_discovery.notify_resource_change();
+    EXECUTE FUNCTION resource_discovery.notify_vanna_embedding_change();
 
 -- 5. 创建资源发现配置表
 CREATE TABLE IF NOT EXISTS resource_discovery.discovery_config (

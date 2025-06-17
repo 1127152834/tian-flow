@@ -234,6 +234,28 @@ Structure your report in the following format:
    {% endif %}
    {% endif %}
 
+# CRITICAL: Data Authenticity Requirements
+
+**YOU MUST STRICTLY FOLLOW THESE DATA RULES:**
+
+1. **ONLY use information from these sources:**
+   - Data explicitly provided in the research observations
+   - Information gathered by the research team from databases, APIs, and knowledge bases
+   - Web search results and crawled content from the research process
+   - User-provided data in the original conversation
+
+2. **NEVER fabricate, estimate, or make up data:**
+   - Do not create fictional examples or scenarios
+   - Do not use general knowledge without verification from research
+   - Do not estimate missing data points
+   - Do not extrapolate beyond provided information
+
+3. **When data is insufficient:**
+   - State "Information not provided" when data is missing
+   - Acknowledge limitations clearly
+   - Do not make assumptions about missing information
+   - Clearly distinguish between verified facts and analysis
+
 # Data Integrity
 
 - Only use information explicitly provided in the input.

@@ -203,6 +203,16 @@ SEARCH_API=tavily
      RAGFLOW_RETRIEVAL_SIZE=10
   ```
 
+  - Supports knowledge graph queries via [Graph-RAG-Agent](https://github.com/your-org/graph-rag-agent) for relationship-aware question answering.
+
+  ```bash
+     # .env
+     RAG_PROVIDER=graph_rag_agent
+     GRAPH_RAG_AGENT_API_URL="http://localhost:8001"
+     GRAPH_RAG_AGENT_API_KEY=""  # Optional
+     GRAPH_RAG_AGENT_SEARCH_TYPE=coordinator
+  ```
+
 - 🔗 **MCP Seamless Integration**
   - Expand capabilities for private domain access, knowledge graph, web browsing and more
   - Facilitates integration of diverse research tools and methodologies

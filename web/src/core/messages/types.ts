@@ -12,7 +12,8 @@ export interface Message {
     | "researcher"
     | "coder"
     | "reporter"
-    | "podcast";
+    | "podcast"
+    | "data_analyst";
   role: MessageRole;
   isStreaming?: boolean;
   content: string;
@@ -24,6 +25,7 @@ export interface Message {
   finishReason?: "stop" | "interrupt" | "tool_calls";
   interruptFeedback?: string;
   resources?: Array<Resource>;
+  chartConfig?: any; // 图表配置数据
 }
 
 export interface Option {

@@ -3,6 +3,7 @@
 
 import os
 import dataclasses
+import asyncio
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from langgraph.prebuilt.chat_agent_executor import AgentState
@@ -60,6 +61,46 @@ def apply_prompt_template(
     try:
         template = env.get_template(f"{prompt_name}.md")
         system_prompt = template.render(**state_vars)
+        return [{"role": "system", "content": system_prompt}] + state["messages"]
+    except Exception as e:
+        raise ValueError(f"Error applying template {prompt_name}: {e}")
+
+
+async def apply_prompt_template_async(
+    prompt_name: str, state: AgentState, configurable: Configuration = None
+) -> list:
+    """
+    Async version of apply_prompt_template that runs template loading in a thread.
+
+    Args:
+        prompt_name: Name of the prompt template to use
+        state: Current agent state containing variables to substitute
+        configurable: Optional configuration object
+
+    Returns:
+        List of messages with the system prompt as the first message
+    """
+    # Convert state to dict for template rendering
+    state_vars = {
+        "CURRENT_TIME": datetime.now().strftime("%a %b %d %Y %H:%M:%S %z"),
+        **state,
+    }
+
+    # Add configurable variables
+    if configurable:
+        state_vars.update(dataclasses.asdict(configurable))
+
+    def _load_and_render_template():
+        """Helper function to load and render template in a thread."""
+        try:
+            template = env.get_template(f"{prompt_name}.md")
+            return template.render(**state_vars)
+        except Exception as e:
+            raise ValueError(f"Error applying template {prompt_name}: {e}")
+
+    try:
+        # Run the blocking template operation in a thread
+        system_prompt = await asyncio.to_thread(_load_and_render_template)
         return [{"role": "system", "content": system_prompt}] + state["messages"]
     except Exception as e:
         raise ValueError(f"Error applying template {prompt_name}: {e}")

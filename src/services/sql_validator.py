@@ -50,6 +50,8 @@ class SQLValidator:
     def __init__(self, datasource_id: int):
         self.datasource_id = datasource_id
         self._table_cache: Dict[str, TableInfo] = {}
+        self._cache_timestamp: Optional[float] = None
+        self._cache_ttl: int = 300  # 5 minutes cache TTL
         self._cache_timestamp = None
     
     async def validate_sql(self, sql: str) -> ValidationResult:
@@ -63,8 +65,19 @@ class SQLValidator:
             ValidationResult: 验证结果
         """
         try:
-            # 刷新表信息缓存
-            await self._refresh_table_cache()
+            # 检查是否是系统查询（如查询系统表）
+            if self._is_system_query(sql):
+                return ValidationResult(
+                    is_valid=True,
+                    errors=[],
+                    warnings=[],
+                    missing_tables=[],
+                    missing_columns=[],
+                    suggestions=[]
+                )
+
+            # 刷新表信息缓存（如果需要）
+            await self._refresh_table_cache_if_needed()
             
             # 解析SQL中的表和列
             tables_in_sql = self._extract_tables_from_sql(sql)
@@ -134,38 +147,86 @@ class SQLValidator:
                 suggestions=["请检查SQL语法是否正确"]
             )
     
+    async def _refresh_table_cache_if_needed(self):
+        """根据需要刷新表信息缓存"""
+        import time
+        current_time = time.time()
+
+        # 检查缓存是否需要刷新
+        if (self._cache_timestamp is None or
+            current_time - self._cache_timestamp > self._cache_ttl or
+            not self._table_cache):
+            await self._refresh_table_cache()
+            self._cache_timestamp = current_time
+
     async def _refresh_table_cache(self):
         """刷新表信息缓存"""
         try:
             from src.services.database_datasource import DatabaseDatasourceService
-            
+
             datasource_service = DatabaseDatasourceService()
             datasource = await datasource_service.get_datasource(self.datasource_id)
-            
+
             if not datasource:
                 logger.error(f"Datasource {self.datasource_id} not found")
                 return
-            
+
             # 获取数据库表结构
             schema_info = await datasource_service.get_database_schema(self.datasource_id)
-            
+
             # 更新缓存
             self._table_cache.clear()
-            for table in schema_info.get('tables', []):
-                table_name = table.get('table_name', '').lower()
+            for table in schema_info.tables:
+                full_table_name = table.get('table_name', '').lower()
+                simple_table_name = table.get('table_name_only', '').lower()
                 columns = [col.get('column_name', '') for col in table.get('columns', [])]
-                
-                self._table_cache[table_name] = TableInfo(
-                    name=table_name,
+                schema_name = table.get('schema_name', '')
+
+                table_info = TableInfo(
+                    name=full_table_name,
                     columns=columns,
-                    schema=table.get('schema_name')
+                    schema=schema_name
                 )
-            
+
+                # 同时存储完整表名和简单表名，以便查找
+                self._table_cache[full_table_name] = table_info
+                if simple_table_name and simple_table_name != full_table_name:
+                    self._table_cache[simple_table_name] = table_info
+
             logger.info(f"Refreshed table cache with {len(self._table_cache)} tables")
-            
+
         except Exception as e:
             logger.error(f"Failed to refresh table cache: {e}")
-    
+
+    def _is_system_query(self, sql: str) -> bool:
+        """检查是否是系统查询（如查询系统表）"""
+        sql_upper = sql.upper().strip()
+
+        # 系统表和系统schema
+        system_patterns = [
+            r'INFORMATION_SCHEMA\.',
+            r'PG_CATALOG\.',
+            r'SYS\.',
+            r'MYSQL\.',
+            r'PERFORMANCE_SCHEMA\.',
+            r'DATABASE\(\)',
+            r'SCHEMA\(\)',
+            r'CURRENT_DATABASE\(\)',
+            r'CURRENT_SCHEMA\(\)',
+            r'SHOW\s+TABLES',
+            r'SHOW\s+DATABASES',
+            r'SHOW\s+SCHEMAS',
+            r'DESC\s+',
+            r'DESCRIBE\s+',
+            r'EXPLAIN\s+',
+        ]
+
+        for pattern in system_patterns:
+            if re.search(pattern, sql_upper):
+                return True
+
+        return False
+
     def _extract_tables_from_sql(self, sql: str) -> List[str]:
         """从SQL中提取表名 - 使用 sqlglot 进行精确解析"""
         try:
@@ -225,16 +286,26 @@ class SQLValidator:
                 for match in matches:
                     # 获取表名（优先使用第二个组，如果没有则使用第一个）
                     groups = match.groups()
+                    schema_name = None
                     table_name = None
 
-                    # 查找非空的组
-                    for i in range(len(groups) - 1, -1, -1):
-                        if groups[i] and groups[i].strip():
-                            table_name = groups[i].strip()
-                            break
+                    # 提取 schema 和 table 名称
+                    if len(groups) >= 2:
+                        schema_name = groups[0] if groups[0] and groups[0].strip() else None
+                        table_name = groups[1] if groups[1] and groups[1].strip() else None
+                    elif len(groups) >= 1:
+                        table_name = groups[0] if groups[0] and groups[0].strip() else None
 
-                    if table_name and table_name.lower() not in [t.lower() for t in tables]:
-                        tables.append(table_name.lower())
+                    if table_name:
+                        # 构建完整表名和简单表名
+                        simple_name = table_name.lower()
+                        full_name = f"{schema_name.lower()}.{simple_name}" if schema_name else simple_name
+
+                        # 添加两种形式的表名
+                        if simple_name not in [t.lower() for t in tables]:
+                            tables.append(simple_name)
+                        if full_name != simple_name and full_name not in [t.lower() for t in tables]:
+                            tables.append(full_name)
 
             return tables
 

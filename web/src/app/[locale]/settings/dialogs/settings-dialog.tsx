@@ -125,7 +125,7 @@ export function SettingsDialog() {
                   >
                     <tab.icon size={16} />
                     <span>{tab.label}</span>
-                    {tab.badge && (
+                    {'badge' in tab && tab.badge && (
                       <Badge
                         variant="outline"
                         className={cn(
@@ -134,7 +134,7 @@ export function SettingsDialog() {
                             "border-primary-foreground text-primary-foreground",
                         )}
                       >
-                        {tab.badge}
+                        {'badge' in tab ? tab.badge : ''}
                       </Badge>
                     )}
                   </li>

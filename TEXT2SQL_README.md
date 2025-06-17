@@ -105,7 +105,7 @@ redis-server --port 6380 &
 celery -A src.tasks.text2sql_tasks worker --loglevel=info --concurrency=2 &
 
 # 启动 FastAPI 服务器
-python -m uvicorn src.server.app:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn src.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### 4. 访问界面

@@ -1,0 +1,66 @@
+{
+  "type": "ComposedChart",
+  "title": "Composed Chart",
+  "width": 800,
+  "height": 400,
+  "data": [
+    {
+      "category": "A",
+      "value": 23,
+      "line_value": 30
+    },
+    {
+      "category": "B",
+      "value": 45,
+      "line_value": 40
+    },
+    {
+      "category": "C",
+      "value": 56,
+      "line_value": 50
+    },
+    {
+      "category": "D",
+      "value": 78,
+      "line_value": 60
+    },
+    {
+      "category": "E",
+      "value": 32,
+      "line_value": 35
+    }
+  ],
+  "margin": {
+    "top": 20,
+    "right": 30,
+    "left": 20,
+    "bottom": 5
+  },
+  "xAxis": {
+    "dataKey": "category",
+    "type": "category"
+  },
+  "yAxis": {
+    "type": "number"
+  },
+  "bars": [
+    {
+      "dataKey": "value",
+      "fill": "#8884d8"
+    }
+  ],
+  "lines": [
+    {
+      "type": "monotone",
+      "dataKey": "value",
+      "stroke": "#ff7300"
+    }
+  ],
+  "tooltip": {
+    "active": true
+  },
+  "legend": {
+    "verticalAlign": "top",
+    "height": 36
+  }
+}

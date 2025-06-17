@@ -8,28 +8,6 @@
 
 import { resolveServiceURL } from './resolve-service-url';
 
-// Helper function for API requests
-async function apiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const url = resolveServiceURL(endpoint);
-  const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-  }
-
-  return response.json();
-}
-
 // Helper function to convert backend response to frontend types
 function convertAPIDefinitionResponse(response: any): APIDefinition {
   return {
@@ -240,6 +218,7 @@ export interface CallStatistics {
   failed_calls: number;
   average_response_time: number;
   success_rate: number;
+  calls_today: number;
   period_days: number;
   start_date: string;
   end_date: string;
@@ -261,8 +240,15 @@ export async function listAPIDefinitions(params?: {
   if (params?.enabled !== undefined) searchParams.append('enabled', params.enabled.toString());
   if (params?.search) searchParams.append('search', params.search);
 
-  const response = await apiRequest<any[]>(`api/admin/api-definitions?${searchParams.toString()}`);
-  return response.map(convertAPIDefinitionResponse);
+  const response = await fetch(resolveServiceURL(`api-definitions?${searchParams.toString()}`));
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to list API definitions');
+  }
+
+  const data = await response.json();
+  return data.map(convertAPIDefinitionResponse);
 }
 
 export async function countAPIDefinitions(params?: {
@@ -276,64 +262,138 @@ export async function countAPIDefinitions(params?: {
   if (params?.enabled !== undefined) searchParams.append('enabled', params.enabled.toString());
   if (params?.search) searchParams.append('search', params.search);
 
-  return apiRequest<{ count: number }>(`api/admin/api-definitions/count?${searchParams.toString()}`);
+  const response = await fetch(resolveServiceURL(`api-definitions/count?${searchParams.toString()}`));
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to count API definitions');
+  }
+
+  return response.json();
 }
 
 export async function createAPIDefinition(data: Omit<APIDefinition, 'id' | 'created_at' | 'updated_at'>): Promise<APIDefinition> {
-  const response = await apiRequest<any>('api/admin/api-definitions', {
+  const response = await fetch(resolveServiceURL(`api-definitions`), {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  return convertAPIDefinitionResponse(response);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to create API definition');
+  }
+
+  const result = await response.json();
+  return convertAPIDefinitionResponse(result);
 }
 
 export async function getAPIDefinition(id: number): Promise<APIDefinition> {
-  const response = await apiRequest<any>(`api/admin/api-definitions/${id}`);
-  return convertAPIDefinitionResponse(response);
+  const response = await fetch(resolveServiceURL(`api-definitions/${id}`));
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to get API definition');
+  }
+
+  const result = await response.json();
+  return convertAPIDefinitionResponse(result);
 }
 
 export async function updateAPIDefinition(id: number, data: Partial<APIDefinition>): Promise<APIDefinition> {
-  const response = await apiRequest<any>(`api/admin/api-definitions/${id}`, {
+  const response = await fetch(resolveServiceURL(`api-definitions/${id}`), {
     method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  return convertAPIDefinitionResponse(response);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to update API definition');
+  }
+
+  const result = await response.json();
+  return convertAPIDefinitionResponse(result);
 }
 
 export async function deleteAPIDefinition(id: number): Promise<{ message: string }> {
-  return apiRequest<{ message: string }>(`api/admin/api-definitions/${id}`, {
+  const response = await fetch(resolveServiceURL(`api-definitions/${id}`), {
     method: 'DELETE',
   });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to delete API definition');
+  }
+
+  return response.json();
 }
 
 export async function toggleAPIEnabled(id: number): Promise<APIDefinition> {
-  const response = await apiRequest<any>(`api/admin/api-definitions/${id}/toggle`, {
+  const response = await fetch(resolveServiceURL(`api-definitions/${id}/toggle`), {
     method: 'POST',
   });
-  return convertAPIDefinitionResponse(response);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to toggle API enabled status');
+  }
+
+  const result = await response.json();
+  return convertAPIDefinitionResponse(result);
 }
 
 export async function executeAPI(id: number, request: APIExecutionRequest): Promise<APIExecutionResult> {
-  return apiRequest<APIExecutionResult>(`api/admin/api-definitions/${id}/execute`, {
+  const response = await fetch(resolveServiceURL(`api-definitions/${id}/execute`), {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to execute API');
+  }
+
+  return response.json();
 }
 
 export async function testAPIConnection(id: number, testParameters?: Record<string, any>): Promise<any> {
-  return apiRequest<any>(`api/admin/api-definitions/${id}/test`, {
+  const response = await fetch(resolveServiceURL(`api-definitions/${id}/test`), {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ test_parameters: testParameters }),
   });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to test API connection');
+  }
+
+  return response.json();
 }
 
 // Statistics and Search Functions
 export async function getAPIStatistics(): Promise<APIStatistics> {
-  return apiRequest<APIStatistics>('api/admin/api-definitions/statistics/summary');
+  const response = await fetch(resolveServiceURL(`api-definitions/statistics/summary`));
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to get API statistics');
+  }
+
+  return response.json();
 }
 
 export async function getAPICategories(): Promise<{ categories: string[] }> {
-  return apiRequest<{ categories: string[] }>('api/admin/api-definitions/categories/list');
+  const response = await fetch(resolveServiceURL(`api-definitions/categories/list`));
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to get API categories');
+  }
+
+  return response.json();
 }
 
 export async function searchAPIs(query: string, limit?: number): Promise<{ results: APIDefinition[] }> {
@@ -341,14 +401,28 @@ export async function searchAPIs(query: string, limit?: number): Promise<{ resul
   searchParams.append('q', query);
   if (limit) searchParams.append('limit', limit.toString());
 
-  return apiRequest<{ results: APIDefinition[] }>(`api/admin/api-definitions/search/query?${searchParams.toString()}`);
+  const response = await fetch(resolveServiceURL(`api-definitions/search/query?${searchParams.toString()}`));
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to search APIs');
+  }
+
+  return response.json();
 }
 
 export async function getRecentAPIs(limit?: number): Promise<{ results: APIDefinition[] }> {
   const searchParams = new URLSearchParams();
   if (limit) searchParams.append('limit', limit.toString());
 
-  return apiRequest<{ results: APIDefinition[] }>(`api/admin/api-definitions/recent/list?${searchParams.toString()}`);
+  const response = await fetch(resolveServiceURL(`api-definitions/recent/list?${searchParams.toString()}`));
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to get recent APIs');
+  }
+
+  return response.json();
 }
 
 // Bulk Operations
@@ -357,10 +431,18 @@ export async function bulkUpdateAPIs(data: {
   category?: string;
   enabled?: boolean;
 }): Promise<{ message: string; updated_count: number }> {
-  return apiRequest<{ message: string; updated_count: number }>('api/admin/api-definitions/bulk/update', {
+  const response = await fetch(resolveServiceURL(`api-definitions/bulk/update`), {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to bulk update APIs');
+  }
+
+  return response.json();
 }
 
 // API Call Log Functions
@@ -385,11 +467,25 @@ export async function listAPICallLogs(params?: {
   if (params?.start_date) searchParams.append('start_date', params.start_date);
   if (params?.end_date) searchParams.append('end_date', params.end_date);
 
-  return apiRequest<APICallLog[]>(`api/admin/api-call-logs?${searchParams.toString()}`);
+  const response = await fetch(resolveServiceURL(`api-call-logs?${searchParams.toString()}`));
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to list API call logs');
+  }
+
+  return response.json();
 }
 
 export async function getAPICallLog(id: number): Promise<APICallLog> {
-  return apiRequest<APICallLog>(`api/admin/api-call-logs/${id}`);
+  const response = await fetch(resolveServiceURL(`api-call-logs/${id}`));
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to get API call log');
+  }
+
+  return response.json();
 }
 
 export async function getCallStatistics(params?: {
@@ -401,27 +497,91 @@ export async function getCallStatistics(params?: {
   if (params?.api_definition_id !== undefined) searchParams.append('api_definition_id', params.api_definition_id.toString());
   if (params?.days !== undefined) searchParams.append('days', params.days.toString());
 
-  return apiRequest<CallStatistics>(`api/admin/api-call-logs/statistics/summary?${searchParams.toString()}`);
+  const response = await fetch(resolveServiceURL(`api-call-logs/statistics/summary?${searchParams.toString()}`));
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to get call statistics');
+  }
+
+  return response.json();
 }
 
 // Curl Parsing Functions
 export async function parseCurlCommand(curlCommand: string): Promise<CurlParseResult> {
-  return apiRequest<CurlParseResult>('api/admin/curl-parse/parse', {
+  const response = await fetch(resolveServiceURL(`curl-parse/parse`), {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ curl_command: curlCommand }),
   });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to parse curl command');
+  }
+
+  return response.json();
 }
 
 export async function importFromCurl(curlCommand: string): Promise<APIDefinition> {
-  return apiRequest<APIDefinition>('api/admin/curl-parse/import', {
+  const response = await fetch(resolveServiceURL(`curl-parse/import`), {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ curl_command: curlCommand }),
   });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to import from curl');
+  }
+
+  return response.json();
 }
 
 export async function validateCurlCommand(curlCommand: string): Promise<any> {
-  return apiRequest<any>('api/admin/curl-parse/validate', {
+  const response = await fetch(resolveServiceURL(`curl-parse/validate`), {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ curl_command: curlCommand }),
   });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to validate curl command');
+  }
+
+  return response.json();
 }
+
+// API Management Client Object
+export const apiManagementClient = {
+  // API Definition Management
+  listAPIDefinitions,
+  countAPIDefinitions,
+  createAPIDefinition,
+  getAPIDefinition,
+  updateAPIDefinition,
+  deleteAPIDefinition,
+  toggleAPIEnabled,
+  executeAPI,
+  testAPIConnection,
+
+  // Statistics and Search
+  getAPIStatistics,
+  getAPICategories,
+  searchAPIs,
+  getRecentAPIs,
+
+  // Bulk Operations
+  bulkUpdateAPIs,
+
+  // API Call Logs
+  listAPICallLogs,
+  getAPICallLog,
+  getCallStatistics,
+
+  // Curl Parsing
+  parseCurlCommand,
+  importFromCurl,
+  validateCurlCommand,
+};

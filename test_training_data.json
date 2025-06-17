@@ -1,0 +1,25 @@
+{
+  "datasource_id": 1,
+  "sql_pairs": [
+    {
+      "question": "查询2024年1月Freyr产品的状态统计",
+      "sql": "SELECT status, COUNT(*) as count FROM production_order WHERE convey_date BETWEEN '2024-01-01' AND '2024-01-31' AND (material_code = '0.0000.0308' OR material_name = 'Freyr (Orange)') GROUP BY status;"
+    },
+    {
+      "question": "统计2024年6月SLIMCORE 100的数量",
+      "sql": "SELECT status, COUNT(*) as count FROM production_order WHERE convey_date BETWEEN '2024-06-01' AND '2024-06-30' AND material_code = '0.9002.0079' GROUP BY status;"
+    },
+    {
+      "question": "查看X7R-II主机标配的状态分布",
+      "sql": "SELECT status, COUNT(*) as count FROM production_order WHERE material_name = 'X7R-II主机标配' GROUP BY status;"
+    },
+    {
+      "question": "统计WARRIOR Mini 2的订单状态",
+      "sql": "SELECT status, COUNT(*) as count FROM production_order WHERE material_name = 'WARRIOR Mini 2' GROUP BY status;"
+    },
+    {
+      "question": "查询X9R主机标配的状态",
+      "sql": "SELECT status, COUNT(*) as count FROM production_order WHERE material_name = 'X9R主机标配' GROUP BY status;"
+    }
+  ]
+}

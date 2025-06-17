@@ -183,9 +183,14 @@ class PgVectorStore:
                         ))
 
                         result = cursor.fetchone()
+                        if result:
+                            record_id = result[0] if isinstance(result, (tuple, list)) else result
+                        else:
+                            record_id = None
+
                         conn.commit()
 
-                        logger.info(f"Added DDL embedding: {content_hash}, table: {table_name}, all_tables: {table_names}")
+                        logger.info(f"Added DDL embedding: {content_hash}, table: {table_name}, all_tables: {table_names}, record_id: {record_id}")
                         return content_hash
 
             # Run in thread to avoid blocking
@@ -204,26 +209,75 @@ class PgVectorStore:
             **kwargs: Additional metadata
 
         Returns:
-            Record ID
+            Content hash of the added documentation
         """
         try:
-            # Mock implementation for now
+            from src.config.database import get_database_connection, get_database_config
+
             content_hash = self._generate_content_hash(documentation)
 
-            logger.info(f"Mock: Added documentation to vector store: {documentation[:50]}...")
-            logger.info(f"Documentation content hash: {content_hash}")
+            # Get current database name
+            db_config = get_database_config()
+            database_name = db_config.get("database", "aolei_db")
 
             # Generate embedding for the documentation
             try:
                 embedding = self._get_embedding(documentation)
-                logger.info(f"Generated embedding with dimension: {len(embedding)}")
+                embedding_dimension = len(embedding) if embedding else 0
+                logger.info(f"Generated embedding with dimension: {embedding_dimension}")
             except Exception as e:
                 logger.warning(f"Failed to generate embedding: {e}")
+                embedding = None
+                embedding_dimension = 0
 
-            # Return mock ID
-            import random
-            mock_id = random.randint(1000, 9999)
-            return str(mock_id)
+            # Store in PostgreSQL database
+            with get_database_connection() as conn:
+                with conn.cursor() as cursor:
+                    # Check if already exists
+                    cursor.execute("""
+                        SELECT id FROM text2sql.vanna_embeddings
+                        WHERE datasource_id = %s AND content_hash = %s
+                    """, (self.datasource_id, content_hash))
+
+                    existing = cursor.fetchone()
+                    if existing:
+                        logger.debug(f"Documentation already exists: {content_hash}")
+                        return content_hash
+
+                    # Prepare metadata
+                    import json
+                    enhanced_metadata = kwargs.copy() if kwargs else {}
+                    enhanced_metadata.update({
+                        'database_name': database_name,
+                        'content_type': 'documentation',
+                        'auto_extracted': False
+                    })
+
+                    cursor.execute("""
+                        INSERT INTO text2sql.vanna_embeddings
+                        (datasource_id, content_type, content, content_hash,
+                         embedding_vector, metadata, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+                        RETURNING id
+                    """, (
+                        self.datasource_id,
+                        'DOCUMENTATION',  # Following ti-flow's VannaContentType.DOCUMENTATION
+                        documentation,
+                        content_hash,
+                        embedding,
+                        json.dumps(enhanced_metadata)
+                    ))
+
+                    result = cursor.fetchone()
+                    if result:
+                        record_id = result[0] if isinstance(result, (tuple, list)) else result
+                    else:
+                        record_id = None
+
+                    conn.commit()
+
+                    logger.info(f"Added documentation embedding: {content_hash}, record_id: {record_id}")
+                    return content_hash
 
         except Exception as e:
             logger.error(f"Failed to add documentation: {e}")
@@ -300,19 +354,24 @@ class PgVectorStore:
                     """, (
                         self.datasource_id,
                         'SQL',  # Following ti-flow's VannaContentType.SQL
-                        combined_content,  # Combined content for embedding
+                        sql,  # Store SQL in content field for consistency
                         content_hash,
                         question,  # Store question separately (like ti-flow)
                         sql,       # Store SQL separately (like ti-flow)
                         primary_table,  # Store primary table name
-                        embedding,
+                        embedding,  # Embedding is still based on combined_content
                         json.dumps(enhanced_metadata)  # Enhanced metadata with table info
                     ))
 
-                    record_id = cursor.fetchone()[0]
+                    result = cursor.fetchone()
+                    if result:
+                        record_id = result[0] if isinstance(result, (tuple, list)) else result
+                    else:
+                        record_id = None
+
                     conn.commit()
 
-                    logger.info(f"Added question-SQL embedding: {content_hash}, table: {primary_table}, all_tables: {table_names}")
+                    logger.info(f"Added question-SQL embedding: {content_hash}, table: {primary_table}, all_tables: {table_names}, record_id: {record_id}")
                     return content_hash
 
         except Exception as e:
@@ -528,19 +587,112 @@ class PgVectorStore:
     
     def remove_training_data(self, id: str) -> bool:
         """
-        Remove training data by ID
+        Remove training data by ID or content hash
 
         Args:
-            id: Record ID
+            id: Record ID or content hash
 
         Returns:
             True if successful, False otherwise
         """
         try:
-            # Mock implementation for now
-            logger.info(f"Mock: Removed training data with ID: {id}")
-            return True
+            from src.config.database import get_database_connection
+
+            logger.info(f"Removing training data with ID/hash: {id}")
+
+            with get_database_connection() as conn:
+                with conn.cursor() as cursor:
+                    # Try to remove by record ID first
+                    cursor.execute("""
+                        DELETE FROM text2sql.vanna_embeddings
+                        WHERE datasource_id = %s AND id = %s
+                    """, (self.datasource_id, id))
+
+                    rows_affected = cursor.rowcount
+
+                    # If no rows affected, try to remove by content hash
+                    if rows_affected == 0:
+                        cursor.execute("""
+                            DELETE FROM text2sql.vanna_embeddings
+                            WHERE datasource_id = %s AND content_hash = %s
+                        """, (self.datasource_id, id))
+
+                        rows_affected = cursor.rowcount
+
+                    conn.commit()
+
+                    if rows_affected > 0:
+                        logger.info(f"Successfully removed {rows_affected} training data record(s) with ID/hash: {id}")
+                        return True
+                    else:
+                        logger.warning(f"No training data found with ID/hash: {id}")
+                        return False
 
         except Exception as e:
             logger.error(f"Failed to remove training data: {e}")
             return False
+
+    def remove_training_data_by_type(self, content_type: str) -> int:
+        """
+        Remove all training data of a specific type
+
+        Args:
+            content_type: Content type ('DDL', 'SQL', 'DOCUMENTATION')
+
+        Returns:
+            Number of records removed
+        """
+        try:
+            from src.config.database import get_database_connection
+
+            logger.info(f"Removing all training data of type: {content_type}")
+
+            with get_database_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        DELETE FROM text2sql.vanna_embeddings
+                        WHERE datasource_id = %s AND content_type = %s
+                    """, (self.datasource_id, content_type))
+
+                    rows_affected = cursor.rowcount
+                    conn.commit()
+
+                    logger.info(f"Successfully removed {rows_affected} training data records of type: {content_type}")
+                    return rows_affected
+
+        except Exception as e:
+            logger.error(f"Failed to remove training data by type: {e}")
+            return 0
+
+    def get_training_data_stats(self) -> Dict[str, int]:
+        """
+        Get statistics about training data
+
+        Returns:
+            Dictionary with counts by content type
+        """
+        try:
+            from src.config.database import get_database_connection
+
+            with get_database_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT content_type, COUNT(*) as count
+                        FROM text2sql.vanna_embeddings
+                        WHERE datasource_id = %s
+                        GROUP BY content_type
+                    """, (self.datasource_id,))
+
+                    stats = {}
+                    for row in cursor.fetchall():
+                        stats[row[0]] = row[1]
+
+                    # Add total count
+                    stats['TOTAL'] = sum(stats.values())
+
+                    logger.info(f"Training data stats: {stats}")
+                    return stats
+
+        except Exception as e:
+            logger.error(f"Failed to get training data stats: {e}")
+            return {}

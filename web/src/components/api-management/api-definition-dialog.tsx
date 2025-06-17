@@ -28,18 +28,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { Switch } from '~/components/ui/switch';
 import { useToast } from '~/hooks/use-toast';
 
+import {
+  HTTPMethod,
+  AuthType,
+  apiManagementClient
+} from '~/core/api/api-management';
 import type {
   APIDefinition,
   AuthConfig,
   Parameter,
   ResponseConfig,
-  RateLimit
-} from '~/core/api/api-management';
-import {
-  HTTPMethod,
-  AuthType,
-  createAPIDefinition,
-  updateAPIDefinition
+  RateLimit,
 } from '~/core/api/api-management';
 import { ParameterEditor } from './parameter-editor';
 import { AuthConfigEditor } from './auth-config-editor';
@@ -172,14 +171,14 @@ export function APIDefinitionDialog({
 
       if (apiDefinition?.id) {
         // 更新
-        await updateAPIDefinition(apiDefinition.id, apiData);
+        await apiManagementClient.updateAPIDefinition(apiDefinition.id, apiData);
         toast({
           title: '更新成功',
           description: `API "${data.name}" 已更新`,
         });
       } else {
         // 创建
-        await createAPIDefinition(apiData);
+        await apiManagementClient.createAPIDefinition(apiData);
         toast({
           title: '创建成功',
           description: `API "${data.name}" 已创建`,

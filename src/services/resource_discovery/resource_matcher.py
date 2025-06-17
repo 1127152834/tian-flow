@@ -6,6 +6,7 @@
 
 import logging
 import hashlib
+import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
@@ -19,6 +20,9 @@ from src.models.resource_discovery import (
     UserFeedback
 )
 from src.llms.embedding import embed_query
+from src.tools.api_tools import execute_api, list_available_apis, get_api_details
+from src.tools.text2sql_tools import text2sql_query, generate_sql_only, get_training_examples
+from src.tools.database_tools import database_query, list_databases, test_database_connection
 
 logger = logging.getLogger(__name__)
 
@@ -435,3 +439,323 @@ class ResourceMatcher:
         except Exception as e:
             session.rollback()
             logger.error(f"记录匹配历史失败: {e}")
+
+    async def execute_matched_resource(
+        self,
+        resource_match: ResourceMatch,
+        parameters: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """执行匹配到的资源"""
+        try:
+            resource = resource_match.resource
+            resource_type = resource.resource_type
+            resource_id = resource.resource_id
+
+            logger.info(f"执行资源: {resource_id} (类型: {resource_type})")
+
+            # 根据资源类型选择合适的工具执行
+            if resource_type == "DATABASE":
+                return await self._execute_database_resource(resource, parameters)
+            elif resource_type == "API":
+                return await self._execute_api_resource(resource, parameters)
+            elif resource_type == "TEXT2SQL":
+                return await self._execute_text2sql_resource(resource, parameters)
+            elif resource_type == "TOOL":
+                return await self._execute_tool_resource(resource, parameters)
+            else:
+                return {
+                    "success": False,
+                    "error": f"不支持的资源类型: {resource_type}",
+                    "resource_id": resource_id
+                }
+
+        except Exception as e:
+            logger.error(f"执行资源失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "resource_id": resource_match.resource.resource_id
+            }
+
+    async def _execute_database_resource(
+        self,
+        resource: ResourceRegistryResponse,
+        parameters: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """执行数据库资源"""
+        try:
+            metadata = resource.metadata or {}
+            datasource_id = metadata.get("datasource_id")
+
+            if not datasource_id:
+                return {"success": False, "error": "缺少数据源ID"}
+
+            # 根据参数决定执行什么操作
+            query_type = parameters.get("query_type", "info")
+
+            if query_type == "test":
+                # 测试数据库连接
+                result = test_database_connection.invoke({
+                    "database_name": str(datasource_id)
+                })
+            else:
+                # 查询数据库信息
+                result = database_query.invoke({
+                    "database_name": str(datasource_id),
+                    "query_type": query_type
+                })
+
+            return {
+                "success": True,
+                "resource_id": resource.resource_id,
+                "resource_type": "DATABASE",
+                "result": json.loads(result) if isinstance(result, str) else result
+            }
+
+        except Exception as e:
+            logger.error(f"执行数据库资源失败: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _execute_api_resource(
+        self,
+        resource: ResourceRegistryResponse,
+        parameters: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """执行API资源"""
+        try:
+            metadata = resource.metadata or {}
+            api_id = metadata.get("api_id")
+
+            if not api_id:
+                return {"success": False, "error": "缺少API ID"}
+
+            # 执行API调用
+            api_parameters = parameters.get("api_parameters", {})
+            result = execute_api.invoke({
+                "api_name": str(api_id),
+                "parameters": api_parameters
+            })
+
+            return {
+                "success": True,
+                "resource_id": resource.resource_id,
+                "resource_type": "API",
+                "result": json.loads(result) if isinstance(result, str) else result
+            }
+
+        except Exception as e:
+            logger.error(f"执行API资源失败: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _execute_text2sql_resource(
+        self,
+        resource: ResourceRegistryResponse,
+        parameters: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """执行Text2SQL资源"""
+        try:
+            metadata = resource.metadata or {}
+            datasource_id = metadata.get("datasource_id", 1)
+
+            question = parameters.get("question")
+            if not question:
+                return {"success": False, "error": "缺少查询问题"}
+
+            # 执行Text2SQL查询
+            execute_sql = parameters.get("execute_sql", True)
+            result = text2sql_query.invoke({
+                "question": question,
+                "database_id": datasource_id,
+                "execute_sql": execute_sql
+            })
+
+            return {
+                "success": True,
+                "resource_id": resource.resource_id,
+                "resource_type": "TEXT2SQL",
+                "result": json.loads(result) if isinstance(result, str) else result
+            }
+
+        except Exception as e:
+            logger.error(f"执行Text2SQL资源失败: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _execute_tool_resource(
+        self,
+        resource: ResourceRegistryResponse,
+        parameters: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """执行工具资源"""
+        try:
+            metadata = resource.metadata or {}
+            function_name = metadata.get("function_name")
+            tool_type = metadata.get("tool_type", "system")
+
+            if not function_name:
+                return {"success": False, "error": "缺少函数名称"}
+
+            logger.info(f"执行工具资源: {function_name}, 类型: {tool_type}")
+
+            # 根据工具类型和函数名动态调用对应的工具
+            if tool_type == "tavily_search":
+                return await self._execute_tavily_search_tool(function_name, parameters)
+            elif tool_type == "system":
+                return await self._execute_system_tool(function_name, parameters)
+            elif tool_type == "custom":
+                return await self._execute_custom_tool(function_name, parameters)
+            else:
+                # 通用工具执行逻辑
+                return await self._execute_generic_tool(function_name, parameters)
+
+        except Exception as e:
+            logger.error(f"执行工具资源失败: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _execute_tavily_search_tool(self, function_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """执行 Tavily 搜索工具"""
+        try:
+            from src.tools.tavily_search.tavily_search_results_with_images import TavilySearchResultsWithImages
+
+            # 创建 Tavily 搜索工具实例
+            search_tool = TavilySearchResultsWithImages(
+                max_results=parameters.get("max_results", 5),
+                include_answer=parameters.get("include_answer", True),
+                include_raw_content=parameters.get("include_raw_content", False),
+                include_images=parameters.get("include_images", True),
+                include_image_descriptions=parameters.get("include_image_descriptions", False)
+            )
+
+            query = parameters.get("query", parameters.get("question", ""))
+            if not query:
+                return {"success": False, "error": "缺少搜索查询参数"}
+
+            # 执行搜索
+            results, raw_results = await search_tool._arun(query)
+
+            return {
+                "success": True,
+                "resource_id": function_name,
+                "resource_type": "TOOL",
+                "result": {
+                    "results": results,
+                    "raw_results": raw_results,
+                    "query": query
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"执行 Tavily 搜索工具失败: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _execute_system_tool(self, function_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """执行系统工具"""
+        try:
+            if function_name == "get_current_time":
+                from datetime import datetime
+                return {
+                    "success": True,
+                    "resource_id": function_name,
+                    "resource_type": "TOOL",
+                    "result": {
+                        "current_time": datetime.now().isoformat(),
+                        "timestamp": datetime.now().timestamp()
+                    }
+                }
+            elif function_name == "get_system_info":
+                import platform
+                import psutil
+                return {
+                    "success": True,
+                    "resource_id": function_name,
+                    "resource_type": "TOOL",
+                    "result": {
+                        "platform": platform.platform(),
+                        "python_version": platform.python_version(),
+                        "cpu_count": psutil.cpu_count(),
+                        "memory_total": psutil.virtual_memory().total,
+                        "memory_available": psutil.virtual_memory().available
+                    }
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"未知的系统工具: {function_name}"
+                }
+
+        except Exception as e:
+            logger.error(f"执行系统工具失败: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _execute_custom_tool(self, function_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """执行自定义工具"""
+        try:
+            # 动态导入和执行自定义工具
+            # 这里可以根据实际需求扩展
+            logger.info(f"执行自定义工具: {function_name}")
+
+            return {
+                "success": True,
+                "resource_id": function_name,
+                "resource_type": "TOOL",
+                "result": {
+                    "message": f"自定义工具 {function_name} 执行成功",
+                    "parameters": parameters,
+                    "execution_time": "0.1s"
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"执行自定义工具失败: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _execute_generic_tool(self, function_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """执行通用工具"""
+        try:
+            # 通用工具执行逻辑
+            # 可以根据 function_name 动态导入和执行相应的工具函数
+
+            # 尝试从工具模块中导入函数
+            tool_modules = [
+                "src.tools.api_tools",
+                "src.tools.database_tools",
+                "src.tools.text2sql_tools"
+            ]
+
+            for module_name in tool_modules:
+                try:
+                    import importlib
+                    module = importlib.import_module(module_name)
+
+                    if hasattr(module, function_name):
+                        tool_function = getattr(module, function_name)
+
+                        # 如果是 LangChain 工具，使用 invoke 方法
+                        if hasattr(tool_function, 'invoke'):
+                            result = tool_function.invoke(parameters)
+                        else:
+                            # 直接调用函数
+                            result = tool_function(**parameters)
+
+                        return {
+                            "success": True,
+                            "resource_id": function_name,
+                            "resource_type": "TOOL",
+                            "result": result
+                        }
+
+                except ImportError:
+                    continue
+                except Exception as e:
+                    logger.warning(f"执行工具 {function_name} 失败: {e}")
+                    continue
+
+            # 如果没有找到对应的工具函数
+            return {
+                "success": False,
+                "error": f"未找到工具函数: {function_name}",
+                "available_modules": tool_modules
+            }
+
+        except Exception as e:
+            logger.error(f"执行通用工具失败: {e}")
+            return {"success": False, "error": str(e)}

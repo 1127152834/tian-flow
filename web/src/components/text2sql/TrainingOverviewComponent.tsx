@@ -50,8 +50,14 @@ export function TrainingOverviewComponent({
   };
 
   const getTrainingRecommendations = () => {
-    const recommendations = [];
-    
+    const recommendations: Array<{
+      type: 'warning' | 'info';
+      title: string;
+      description: string;
+      action: () => void;
+      actionText: string;
+    }> = [];
+
     if (!statistics) return recommendations;
     
     if (statistics.total_training_data < 10) {
@@ -112,10 +118,7 @@ export function TrainingOverviewComponent({
   const handleRetrainModel = async () => {
     setIsRetrainingModel(true);
     try {
-      const result = await text2sqlApi.retrainModel({
-        datasource_id: datasourceId,
-        force_rebuild: true
-      });
+      const result = await text2sqlApi.retrainModel(datasourceId, true);
 
       toast({
         title: "模型重训练已启动",

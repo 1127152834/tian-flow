@@ -256,7 +256,7 @@ async def main():
         print("   1. Start Celery worker: celery -A src.tasks.text2sql_tasks worker --loglevel=info")
         print("   2. Start Redis server: redis-server --port 6380")
         print("   3. Test WebSocket connections")
-        print("   4. Run the FastAPI server: uvicorn src.server.app:app --reload")
+        print("   4. Run the FastAPI server: uvicorn src.app:app --reload")
         
         # Optionally clean up test data
         # await cleanup_test_data()

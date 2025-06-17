@@ -9,13 +9,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Play, Copy } from 'lucide-react';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle 
+import { Play, Copy, CheckCircle, XCircle, Clock, Zap, Globe, Code, FileText, AlertCircle } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
 } from '~/components/ui/dialog';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -25,6 +25,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { Badge } from '~/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useToast } from '~/hooks/use-toast';
+import { Alert, AlertDescription } from '~/components/ui/alert';
+import { Separator } from '~/components/ui/separator';
+import { APIExecutionHistory } from './api-execution-history';
 
 import type {
   APIDefinition,
@@ -193,7 +196,7 @@ export function APIExecutionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto w-full" style={{ width: '1200px', maxWidth: '90vw' }}>
         <DialogHeader>
           <DialogTitle>执行API - {apiDefinition.name}</DialogTitle>
           <DialogDescription>
@@ -202,89 +205,154 @@ export function APIExecutionDialog({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="parameters">参数配置</TabsTrigger>
             <TabsTrigger value="result">执行结果</TabsTrigger>
+            <TabsTrigger value="history">执行历史</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="parameters" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>API信息</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{apiDefinition.method}</Badge>
-                    <span className="text-sm font-mono">{apiDefinition.url}</span>
+          <TabsContent value="parameters" className="space-y-6">
+            {/* API信息概览 */}
+            <Card className="border-l-4 border-l-blue-500 bg-blue-50/50">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4">
+                  <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
+                    <Globe className="h-6 w-6" />
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {apiDefinition.description}
-                  </p>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-semibold">{apiDefinition.name}</h3>
+                      <Badge
+                        variant="outline"
+                        className={`${
+                          apiDefinition.method === 'GET' ? 'border-green-500 text-green-700 bg-green-50' :
+                          apiDefinition.method === 'POST' ? 'border-blue-500 text-blue-700 bg-blue-50' :
+                          apiDefinition.method === 'PUT' ? 'border-orange-500 text-orange-700 bg-orange-50' :
+                          apiDefinition.method === 'DELETE' ? 'border-red-500 text-red-700 bg-red-50' :
+                          'border-gray-500 text-gray-700 bg-gray-50'
+                        }`}
+                      >
+                        {apiDefinition.method}
+                      </Badge>
+                      <Badge variant="secondary">{apiDefinition.category}</Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Code className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-mono bg-white px-2 py-1 rounded border">
+                        {apiDefinition.url}
+                      </span>
+                    </div>
+                    {apiDefinition.description && (
+                      <p className="text-sm text-muted-foreground">
+                        {apiDefinition.description}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
+            {/* 参数配置 */}
             {apiDefinition.parameters.length > 0 ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>参数配置</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-5 w-5 text-purple-600" />
+                    <CardTitle className="text-lg">参数配置</CardTitle>
+                  </div>
                   <CardDescription>
-                    配置API调用所需的参数
+                    配置API调用所需的参数，必填参数标有红色星号
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                   {apiDefinition.parameters.map((param) => (
-                    <div key={param.name} className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor={param.name}>
-                          {param.name}
-                          {param.required && <span className="text-red-500">*</span>}
-                        </Label>
-                        <Badge variant="outline" className="text-xs">
-                          {param.parameter_type === ParameterType.QUERY && 'Query'}
-                          {param.parameter_type === ParameterType.HEADER && 'Header'}
-                          {param.parameter_type === ParameterType.PATH && 'Path'}
-                          {param.parameter_type === ParameterType.BODY && 'Body'}
-                          {param.parameter_type === ParameterType.FORM && 'Form'}
-                        </Badge>
-                        <Badge variant="secondary" className="text-xs">
-                          {param.data_type === DataType.STRING && 'String'}
-                          {param.data_type === DataType.INTEGER && 'Integer'}
-                          {param.data_type === DataType.FLOAT && 'Float'}
-                          {param.data_type === DataType.BOOLEAN && 'Boolean'}
-                          {param.data_type === DataType.ARRAY && 'Array'}
-                          {param.data_type === DataType.OBJECT && 'Object'}
-                        </Badge>
+                    <div key={param.name} className="p-4 border rounded-lg hover:bg-muted/30 transition-colors">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Label htmlFor={param.name} className="text-base font-medium">
+                              {param.name}
+                              {param.required && <span className="text-red-500 ml-1">*</span>}
+                            </Label>
+                            <div className="flex gap-2">
+                              <Badge
+                                variant="outline"
+                                className={`text-xs ${
+                                  param.parameter_type === ParameterType.QUERY ? 'border-blue-500 text-blue-700 bg-blue-50' :
+                                  param.parameter_type === ParameterType.HEADER ? 'border-green-500 text-green-700 bg-green-50' :
+                                  param.parameter_type === ParameterType.PATH ? 'border-orange-500 text-orange-700 bg-orange-50' :
+                                  param.parameter_type === ParameterType.BODY ? 'border-purple-500 text-purple-700 bg-purple-50' :
+                                  'border-gray-500 text-gray-700 bg-gray-50'
+                                }`}
+                              >
+                                {param.parameter_type === ParameterType.QUERY && 'Query'}
+                                {param.parameter_type === ParameterType.HEADER && 'Header'}
+                                {param.parameter_type === ParameterType.PATH && 'Path'}
+                                {param.parameter_type === ParameterType.BODY && 'Body'}
+                                {param.parameter_type === ParameterType.FORM && 'Form'}
+                              </Badge>
+                              <Badge variant="secondary" className="text-xs">
+                                {param.data_type === DataType.STRING && 'String'}
+                                {param.data_type === DataType.INTEGER && 'Integer'}
+                                {param.data_type === DataType.FLOAT && 'Float'}
+                                {param.data_type === DataType.BOOLEAN && 'Boolean'}
+                                {param.data_type === DataType.ARRAY && 'Array'}
+                                {param.data_type === DataType.OBJECT && 'Object'}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                        {param.description && (
+                          <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                            {param.description}
+                          </p>
+                        )}
+                        <div className="pt-2">
+                          {renderParameterInput(param)}
+                        </div>
                       </div>
-                      {param.description && (
-                        <p className="text-xs text-muted-foreground">
-                          {param.description}
-                        </p>
-                      )}
-                      {renderParameterInput(param)}
                     </div>
                   ))}
                 </CardContent>
               </Card>
             ) : (
-              <Card>
-                <CardContent className="text-center py-8">
-                  <p className="text-muted-foreground">此API无需参数</p>
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <div className="p-4 rounded-full bg-muted mb-4">
+                    <CheckCircle className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">无需参数</h3>
+                  <p className="text-muted-foreground text-center">
+                    此API不需要任何参数，可以直接执行
+                  </p>
                 </CardContent>
               </Card>
             )}
 
-            <div className="flex justify-end">
-              <Button onClick={handleExecute} disabled={loading}>
+            {/* 执行按钮 */}
+            <div className="flex justify-between items-center pt-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                {apiDefinition.parameters.length > 0 && (
+                  <>
+                    共 {apiDefinition.parameters.length} 个参数，
+                    其中 {apiDefinition.parameters.filter(p => p.required).length} 个必填
+                  </>
+                )}
+              </div>
+              <Button
+                onClick={handleExecute}
+                disabled={loading}
+                size="lg"
+                className="gap-2 min-w-32"
+              >
                 {loading ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     执行中...
                   </>
                 ) : (
                   <>
-                    <Play className="h-4 w-4 mr-2" />
+                    <Play className="h-4 w-4" />
                     执行API
                   </>
                 )}
@@ -292,104 +360,203 @@ export function APIExecutionDialog({
             </div>
           </TabsContent>
 
-          <TabsContent value="result" className="space-y-4">
+          <TabsContent value="result" className="space-y-6">
             {result ? (
               <>
-                <Card>
-                  <CardHeader>
+                {/* 执行状态概览 */}
+                <Card className={`border-l-4 ${result.success ? 'border-l-green-500 bg-green-50/50' : 'border-l-red-500 bg-red-50/50'}`}>
+                  <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
-                      <CardTitle>执行结果</CardTitle>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleCopyResult}
-                        >
-                          <Copy className="h-4 w-4 mr-2" />
-                          复制
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {/* 执行摘要 */}
-                      <div className="grid grid-cols-4 gap-4">
-                        <div className="text-center">
-                          <div className="text-2xl font-bold">
-                            <Badge variant={result.success ? 'default' : 'destructive'}>
-                              {result.success ? '成功' : '失败'}
-                            </Badge>
-                          </div>
-                          <div className="text-xs text-muted-foreground">执行状态</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold">
-                            {result.result.status_code || 'N/A'}
-                          </div>
-                          <div className="text-xs text-muted-foreground">状态码</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold">
-                            {result.execution_time_ms}ms
-                          </div>
-                          <div className="text-xs text-muted-foreground">执行时间</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold">
-                            {result.session_id?.split('_')[1] || 'N/A'}
-                          </div>
-                          <div className="text-xs text-muted-foreground">会话ID</div>
-                        </div>
-                      </div>
-
-                      {/* 错误信息 */}
-                      {result.result.error_message && (
-                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                          <p className="text-sm text-red-800">
-                            <strong>错误:</strong> {result.result.error_message}
+                      <div className="flex items-center gap-3">
+                        {result.success ? (
+                          <CheckCircle className="h-8 w-8 text-green-600" />
+                        ) : (
+                          <XCircle className="h-8 w-8 text-red-600" />
+                        )}
+                        <div>
+                          <h3 className="text-lg font-semibold">
+                            {result.success ? '执行成功' : '执行失败'}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            API调用已完成，查看详细结果
                           </p>
                         </div>
-                      )}
-
-                      {/* 响应数据 */}
-                      {result.result.parsed_data && (
-                        <div className="space-y-2">
-                          <Label>响应数据</Label>
-                          <Textarea
-                            value={JSON.stringify(result.result.parsed_data, null, 2)}
-                            readOnly
-                            rows={12}
-                            className="font-mono text-sm"
-                          />
-                        </div>
-                      )}
-
-                      {/* 原始响应 */}
-                      {result.result.raw_content && (
-                        <div className="space-y-2">
-                          <Label>原始响应</Label>
-                          <Textarea
-                            value={result.result.raw_content}
-                            readOnly
-                            rows={6}
-                            className="font-mono text-sm"
-                          />
-                        </div>
-                      )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCopyResult}
+                        className="gap-2"
+                      >
+                        <Copy className="h-4 w-4" />
+                        复制结果
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* 执行指标 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${result.success ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                          {result.success ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold">
+                            {result.result.status_code || 'N/A'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">HTTP状态码</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
+                          <Clock className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold">
+                            {result.execution_time_ms}
+                          </p>
+                          <p className="text-xs text-muted-foreground">响应时间(ms)</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
+                          <Zap className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold">
+                            {result.result.data && typeof result.result.data === 'object' ? Object.keys(result.result.data).length : 0}
+                          </p>
+                          <p className="text-xs text-muted-foreground">响应字段数</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
+                          <Globe className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-lg font-bold truncate">
+                            {result.session_id?.slice(-8) || 'N/A'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">会话ID</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* 错误信息 */}
+                {result.result.error_message && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="font-medium">
+                      {result.result.error_message}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* 响应内容 */}
+                <div className="grid gap-6">
+                  {/* 结构化响应数据 */}
+                  {result.result.data && (
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center gap-2">
+                          <Code className="h-5 w-5 text-blue-600" />
+                          <CardTitle className="text-lg">结构化响应数据</CardTitle>
+                        </div>
+                        <CardDescription>
+                          解析后的JSON响应数据，便于查看和使用
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="relative">
+                          <pre className="bg-slate-50 p-4 rounded-lg overflow-auto max-h-96 text-sm border">
+                            <code className="language-json">
+                              {JSON.stringify(result.result.data, null, 2)}
+                            </code>
+                          </pre>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute top-2 right-2"
+                            onClick={() => navigator.clipboard.writeText(JSON.stringify(result.result.data, null, 2))}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* 原始响应 */}
+                  {result.result.raw_response && (
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-gray-600" />
+                          <CardTitle className="text-lg">原始响应内容</CardTitle>
+                        </div>
+                        <CardDescription>
+                          服务器返回的原始响应内容
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="relative">
+                          <Textarea
+                            value={result.result.raw_response}
+                            readOnly
+                            rows={8}
+                            className="font-mono text-sm resize-none"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute top-2 right-2"
+                            onClick={() => navigator.clipboard.writeText(result.result.raw_response)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
               </>
             ) : (
-              <Card>
-                <CardContent className="text-center py-8">
-                  <p className="text-muted-foreground">
-                    请先配置参数并执行API
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <div className="p-4 rounded-full bg-muted mb-4">
+                    <Play className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">准备执行API</h3>
+                  <p className="text-muted-foreground text-center max-w-sm">
+                    请先在参数配置页面设置必要的参数，然后点击执行按钮开始API调用
                   </p>
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="history" className="space-y-4">
+            <APIExecutionHistory apiDefinitionId={apiDefinition.id} />
           </TabsContent>
         </Tabs>
       </DialogContent>

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck
 
 /**
  * 前端错误检查脚本
@@ -21,7 +22,7 @@ try {
   console.log('✅ TypeScript 类型检查通过');
 } catch (error) {
   console.log('❌ 发现 TypeScript 错误:');
-  console.log(error.stdout.toString());
+  console.log(String(error));
 }
 
 // 2. ESLint 检查
@@ -34,7 +35,7 @@ try {
   console.log('✅ ESLint 检查通过');
 } catch (error) {
   console.log('❌ 发现 ESLint 错误:');
-  console.log(error.stdout.toString());
+  console.log(String(error));
 }
 
 // 3. Next.js 构建检查
@@ -47,7 +48,7 @@ try {
   console.log('✅ Next.js 构建检查通过');
 } catch (error) {
   console.log('❌ 发现构建错误:');
-  console.log(error.stdout.toString());
+  console.log(String(error));
 }
 
 // 4. 检查导入路径

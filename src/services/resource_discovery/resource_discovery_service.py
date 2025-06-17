@@ -6,6 +6,7 @@
 
 import logging
 import asyncio
+import json
 from typing import Dict, List, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -17,48 +18,246 @@ from src.models.resource_discovery import (
     ResourceStatus,
     VectorizationStatus
 )
+from src.tools.api_tools import execute_api, list_available_apis, get_api_details
+from src.tools.text2sql_tools import text2sql_query, generate_sql_only, get_training_examples
+from src.tools.database_tools import database_query, list_databases, test_database_connection
 
 logger = logging.getLogger(__name__)
 
 
 class ResourceDiscoveryService:
     """资源发现服务 - 自动发现系统中的各种资源"""
-    
+
     def __init__(self):
         self.discovered_resources = []
+        self.tool_registry = {
+            'api': {
+                'execute_api': execute_api,
+                'list_available_apis': list_available_apis,
+                'get_api_details': get_api_details
+            },
+            'text2sql': {
+                'text2sql_query': text2sql_query,
+                'generate_sql_only': generate_sql_only,
+                'get_training_examples': get_training_examples
+            },
+            'database': {
+                'database_query': database_query,
+                'list_databases': list_databases,
+                'test_database_connection': test_database_connection
+            }
+        }
     
     async def discover_all_resources(self, session: Session) -> List[Dict[str, Any]]:
         """发现所有可用资源"""
         resources = []
-        
+
+        try:
+            # 使用真实工具发现数据库资源
+            db_resources = await self._discover_database_resources_with_tools()
+            resources.extend(db_resources)
+
+            # 使用真实工具发现 API 资源
+            api_resources = await self._discover_api_resources_with_tools()
+            resources.extend(api_resources)
+
+            # 发现系统工具
+            tool_resources = await self._discover_system_tools()
+            resources.extend(tool_resources)
+
+            # 使用真实工具发现 Text2SQL 资源
+            text2sql_resources = await self._discover_text2sql_resources_with_tools()
+            resources.extend(text2sql_resources)
+
+            logger.info(f"✅ 发现了 {len(resources)} 个资源")
+            return resources
+
+        except Exception as e:
+            logger.error(f"资源发现失败: {e}")
+            return []
+
+    async def discover_all_resources_legacy(self, session: Session) -> List[Dict[str, Any]]:
+        """发现所有可用资源 (传统方法，保留作为备用)"""
+        resources = []
+
         try:
             # 发现数据库资源
             db_resources = await self._discover_database_resources(session)
             resources.extend(db_resources)
-            
+
             # 发现 API 资源
             api_resources = await self._discover_api_resources(session)
             resources.extend(api_resources)
-            
+
             # 发现系统工具
             tool_resources = await self._discover_system_tools()
             resources.extend(tool_resources)
-            
-            # 发现知识库资源 (预留)
-            # kb_resources = await self._discover_knowledge_base_resources(session)
-            # resources.extend(kb_resources)
-            
+
             # 发现 Text2SQL 资源
             text2sql_resources = await self._discover_text2sql_resources(session)
             resources.extend(text2sql_resources)
-            
+
             logger.info(f"✅ 发现了 {len(resources)} 个资源")
             return resources
-            
+
         except Exception as e:
             logger.error(f"资源发现失败: {e}")
             return []
-    
+
+    async def _discover_database_resources_with_tools(self) -> List[Dict[str, Any]]:
+        """使用真实工具发现数据库资源"""
+        resources = []
+
+        try:
+            # 使用 list_databases 工具获取数据库列表
+            result = list_databases.invoke({'enabled_only': True})
+            result_data = json.loads(result)
+
+            if result_data.get('success') and result_data.get('data'):
+                databases = result_data['data']['databases']
+
+                for db in databases:
+                    resource = {
+                        "resource_id": f"database_{db['id']}",
+                        "resource_name": db['name'],
+                        "resource_type": ResourceType.DATABASE,
+                        "description": db.get('description') or f"数据库连接: {db['name']} ({db['type']})",
+                        "capabilities": [
+                            "数据查询", "表结构获取", "连接测试",
+                            "数据分析", "统计计算", "元数据查询"
+                        ],
+                        "tags": [
+                            "database", "data", db['type'].lower(),
+                            db['name'].lower().replace(" ", "_")
+                        ],
+                        "metadata": {
+                            "datasource_id": db['id'],
+                            "database_type": db['type'],
+                            "host": db.get('host'),
+                            "port": db.get('port'),
+                            "database": db.get('database'),
+                            "enabled": db.get('enabled', True),
+                            "created_at": db.get('created_at'),
+                            "tool_methods": ["database_query", "test_database_connection"]
+                        },
+                        "source_table": "database_datasources",
+                        "source_id": db['id'],
+                        "is_active": db.get('enabled', True),
+                        "status": ResourceStatus.ACTIVE if db.get('enabled', True) else ResourceStatus.INACTIVE
+                    }
+                    resources.append(resource)
+
+            logger.info(f"使用工具发现了 {len(resources)} 个数据库资源")
+            return resources
+
+        except Exception as e:
+            logger.error(f"使用工具发现数据库资源失败: {e}")
+            return []
+
+    async def _discover_api_resources_with_tools(self) -> List[Dict[str, Any]]:
+        """使用真实工具发现API资源"""
+        resources = []
+
+        try:
+            # 使用 list_available_apis 工具获取API列表
+            result = list_available_apis.invoke({'enabled_only': True})
+            result_data = json.loads(result)
+
+            if result_data.get('success') and result_data.get('data'):
+                apis = result_data['data']['apis']
+
+                for api in apis:
+                    resource = {
+                        "resource_id": f"api_{api['id']}",
+                        "resource_name": api['name'],
+                        "resource_type": ResourceType.API,
+                        "description": api.get('description') or f"API接口: {api['name']}",
+                        "capabilities": [
+                            "HTTP请求", "数据获取", "外部服务调用",
+                            "实时数据", "第三方集成", "API调用"
+                        ],
+                        "tags": [
+                            "api", "http", str(api['method']).lower(),
+                            api.get('category', 'general'),
+                            api['name'].lower().replace(" ", "_")
+                        ],
+                        "metadata": {
+                            "api_id": api['id'],
+                            "method": api['method'],
+                            "url": api['url'],
+                            "category": api.get('category'),
+                            "enabled": api.get('enabled', True),
+                            "tool_methods": ["execute_api", "get_api_details"]
+                        },
+                        "source_table": "api_definitions",
+                        "source_id": api['id'],
+                        "is_active": api.get('enabled', True),
+                        "status": ResourceStatus.ACTIVE if api.get('enabled', True) else ResourceStatus.INACTIVE
+                    }
+                    resources.append(resource)
+
+            logger.info(f"使用工具发现了 {len(resources)} 个API资源")
+            return resources
+
+        except Exception as e:
+            logger.error(f"使用工具发现API资源失败: {e}")
+            return []
+
+    async def _discover_text2sql_resources_with_tools(self) -> List[Dict[str, Any]]:
+        """使用真实工具发现Text2SQL资源"""
+        resources = []
+
+        try:
+            # 使用 get_training_examples 工具获取训练示例
+            result = get_training_examples.invoke({'limit': 100})
+            result_data = json.loads(result)
+
+            if result_data.get('success') and result_data.get('data'):
+                examples = result_data['data']['examples']
+
+                # 按数据源分组
+                datasource_groups = {}
+                for example in examples:
+                    # 这里需要从example中提取datasource_id，如果没有则使用默认值
+                    datasource_id = 1  # 默认数据源ID
+
+                    if datasource_id not in datasource_groups:
+                        datasource_groups[datasource_id] = []
+                    datasource_groups[datasource_id].append(example)
+
+                for datasource_id, group_examples in datasource_groups.items():
+                    resource = {
+                        "resource_id": f"text2sql_{datasource_id}",
+                        "resource_name": f"Text2SQL训练数据 (数据源 {datasource_id})",
+                        "resource_type": ResourceType.TEXT2SQL,
+                        "description": f"Text2SQL训练示例和查询模板 (数据源 {datasource_id})",
+                        "capabilities": [
+                            "自然语言转SQL", "SQL生成", "查询示例",
+                            "语法参考", "最佳实践", "SQL验证"
+                        ],
+                        "tags": [
+                            "text2sql", "vanna", "training_data",
+                            f"datasource_{datasource_id}", "sql_examples"
+                        ],
+                        "metadata": {
+                            "datasource_id": datasource_id,
+                            "example_count": len(group_examples),
+                            "tool_methods": ["text2sql_query", "generate_sql_only", "get_training_examples"]
+                        },
+                        "source_table": "vanna_embeddings",
+                        "source_id": datasource_id,
+                        "is_active": True,
+                        "status": ResourceStatus.ACTIVE
+                    }
+                    resources.append(resource)
+
+            logger.info(f"使用工具发现了 {len(resources)} 个Text2SQL资源")
+            return resources
+
+        except Exception as e:
+            logger.error(f"使用工具发现Text2SQL资源失败: {e}")
+            return []
+
     async def _discover_database_resources(self, session: Session) -> List[Dict[str, Any]]:
         """发现数据库连接资源"""
         resources = []
@@ -333,3 +532,74 @@ class ResourceDiscoveryService:
             capabilities.extend(["分析", "处理"])
         
         return list(set(capabilities))  # 去重
+
+    def get_available_tools(self) -> Dict[str, Any]:
+        """获取所有可用的工具"""
+        return {
+            "tool_registry": self.tool_registry,
+            "tool_count": sum(len(tools) for tools in self.tool_registry.values()),
+            "categories": list(self.tool_registry.keys())
+        }
+
+    async def execute_tool(self, category: str, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """执行指定的工具"""
+        try:
+            if category not in self.tool_registry:
+                return {
+                    "success": False,
+                    "error": f"工具类别 '{category}' 不存在",
+                    "available_categories": list(self.tool_registry.keys())
+                }
+
+            if tool_name not in self.tool_registry[category]:
+                return {
+                    "success": False,
+                    "error": f"工具 '{tool_name}' 在类别 '{category}' 中不存在",
+                    "available_tools": list(self.tool_registry[category].keys())
+                }
+
+            tool = self.tool_registry[category][tool_name]
+            result = tool.invoke(parameters)
+
+            return {
+                "success": True,
+                "category": category,
+                "tool_name": tool_name,
+                "parameters": parameters,
+                "result": result
+            }
+
+        except Exception as e:
+            logger.error(f"执行工具失败: {category}.{tool_name} - {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "category": category,
+                "tool_name": tool_name,
+                "parameters": parameters
+            }
+
+    async def discover_resources_for_query(self, query: str) -> List[Dict[str, Any]]:
+        """根据查询发现相关资源"""
+        try:
+            # 使用所有工具发现资源
+            all_resources = await self.discover_all_resources(None)
+
+            # 简单的关键词匹配来过滤相关资源
+            query_lower = query.lower()
+            relevant_resources = []
+
+            for resource in all_resources:
+                # 检查资源名称、描述、标签和能力
+                if (query_lower in resource.get('resource_name', '').lower() or
+                    query_lower in resource.get('description', '').lower() or
+                    any(query_lower in tag.lower() for tag in resource.get('tags', [])) or
+                    any(query_lower in cap.lower() for cap in resource.get('capabilities', []))):
+                    relevant_resources.append(resource)
+
+            logger.info(f"为查询 '{query}' 找到 {len(relevant_resources)} 个相关资源")
+            return relevant_resources
+
+        except Exception as e:
+            logger.error(f"为查询发现资源失败: {e}")
+            return []

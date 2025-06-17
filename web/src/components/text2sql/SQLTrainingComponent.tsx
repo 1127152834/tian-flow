@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -44,6 +44,11 @@ interface SQLTrainingComponentProps {
 export function SQLTrainingComponent({ datasourceId }: SQLTrainingComponentProps) {
   const [isTraining, setIsTraining] = useState(false);
   const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(null);
+  const [trainingTaskId, setTrainingTaskId] = useState<string | null>(null);
+  const [trainingProgress, setTrainingProgress] = useState(0);
+  const [trainingMessage, setTrainingMessage] = useState('');
+  const [trainingStep, setTrainingStep] = useState('');
+  const [websocket, setWebsocket] = useState<WebSocket | null>(null);
   const [sqlPairs, setSqlPairs] = useState<SQLPair[]>([
     { question: '', sql: '' }
   ]);
@@ -70,6 +75,84 @@ export function SQLTrainingComponent({ datasourceId }: SQLTrainingComponentProps
     );
   };
 
+  // WebSocket连接管理
+  const connectWebSocket = (taskId: string) => {
+    if (websocket) {
+      websocket.close();
+    }
+
+    const wsUrl = `ws://localhost:8000/api/ws/progress/${taskId}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('SQL训练 WebSocket连接已建立:', taskId);
+      setWebsocket(ws);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('收到SQL训练 WebSocket消息:', data);
+
+        setTrainingProgress(data.progress || 0);
+        setTrainingMessage(data.message || '');
+        setTrainingStep(data.current_step || '');
+
+        if (data.status === 'completed') {
+          setIsTraining(false);
+          setTrainingTaskId(null);
+          setTrainingProgress(100);
+          setTrainingMessage('训练完成');
+          setTrainingResult({
+            success: true,
+            total: data.result?.total || 0,
+            successful: data.result?.successful || 0,
+            failed: data.result?.failed || 0,
+            message: '训练完成'
+          });
+          ws.close();
+        } else if (data.status === 'failed') {
+          setIsTraining(false);
+          setTrainingTaskId(null);
+          setTrainingProgress(0);
+          setTrainingMessage('训练失败');
+          setTrainingResult({
+            success: false,
+            total: 0,
+            successful: 0,
+            failed: 0,
+            error: data.error || '训练过程中发生错误'
+          });
+          ws.close();
+        }
+      } catch (error) {
+        console.error('解析SQL训练 WebSocket消息失败:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('SQL训练 WebSocket错误:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('SQL训练 WebSocket连接已关闭');
+      setWebsocket(null);
+    };
+  };
+
+  // 监控训练任务进度
+  useEffect(() => {
+    if (trainingTaskId && isTraining) {
+      connectWebSocket(trainingTaskId);
+    }
+
+    return () => {
+      if (websocket) {
+        websocket.close();
+      }
+    };
+  }, [trainingTaskId, isTraining]);
+
   const handleTraining = async () => {
     const validPairs = validateSqlPairs();
     if (validPairs.length === 0 || isTraining) return;
@@ -77,12 +160,22 @@ export function SQLTrainingComponent({ datasourceId }: SQLTrainingComponentProps
     try {
       setIsTraining(true);
       setTrainingResult(null);
-      
+      setTrainingProgress(0);
+      setTrainingMessage('启动训练任务...');
+      setTrainingStep('');
+
       const result = await text2sqlApi.trainSQL(datasourceId, {
         sql_pairs: validPairs
       });
 
-      setTrainingResult(result);
+      // 如果返回了task_id，使用WebSocket监控
+      if (result.task_id) {
+        setTrainingTaskId(result.task_id);
+      } else {
+        // 如果没有task_id，直接显示结果
+        setTrainingResult(result);
+        setIsTraining(false);
+      }
     } catch (error: any) {
       console.error('SQL训练失败:', error);
       setTrainingResult({
@@ -92,8 +185,10 @@ export function SQLTrainingComponent({ datasourceId }: SQLTrainingComponentProps
         failed: 0,
         error: error.message || '网络错误'
       });
-    } finally {
       setIsTraining(false);
+      setTrainingProgress(0);
+      setTrainingMessage('');
+      setTrainingStep('');
     }
   };
 
@@ -260,8 +355,8 @@ export function SQLTrainingComponent({ datasourceId }: SQLTrainingComponentProps
               <div className="text-sm text-muted-foreground">
                 有效示例：{validateSqlPairs().length} / {sqlPairs.length}
               </div>
-              <Button 
-                onClick={handleTraining} 
+              <Button
+                onClick={handleTraining}
                 disabled={isTraining || validateSqlPairs().length === 0}
                 className="bg-purple-600 hover:bg-purple-700"
               >
@@ -278,6 +373,37 @@ export function SQLTrainingComponent({ datasourceId }: SQLTrainingComponentProps
                 )}
               </Button>
             </div>
+
+            {/* 训练进度显示 */}
+            {isTraining && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                    <span className="text-sm text-purple-800 font-medium">
+                      SQL训练进行中...
+                    </span>
+                  </div>
+
+                  {/* 进度条 */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-purple-700">
+                      <span>{trainingStep || '准备中...'}</span>
+                      <span>{trainingProgress}%</span>
+                    </div>
+                    <div className="w-full bg-purple-200 rounded-full h-2">
+                      <div
+                        className="bg-purple-600 h-2 rounded-full transition-all duration-300 ease-out"
+                        style={{ width: `${trainingProgress}%` }}
+                      ></div>
+                    </div>
+                    {trainingMessage && (
+                      <p className="text-xs text-purple-600 mt-1">{trainingMessage}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {validateSqlPairs().length === 0 && sqlPairs.length > 0 && (
               <Alert>

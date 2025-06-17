@@ -15,7 +15,7 @@ load_dotenv()
 # Add src to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.tasks.text2sql_tasks import celery_app
+from src.celery_app import celery_app
 
 if __name__ == '__main__':
     # Start Celery worker
@@ -23,6 +23,6 @@ if __name__ == '__main__':
         'worker',
         '--loglevel=info',
         '--concurrency=2',
-        '--queues=text2sql,database,cleanup',
+        '--queues=text2sql,database,cleanup,resource_discovery',
         '--hostname=deer-flow-worker@%h'
     ])

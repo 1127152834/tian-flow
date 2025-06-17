@@ -61,7 +61,7 @@ services:
         echo 'Waiting for Redis and PostgreSQL...' &&
         sleep 15 &&
         echo 'Starting Celery Worker with all queues...' &&
-        uv run celery -A src.tasks.celery_app worker --loglevel=info --concurrency=4 --queues=knowledge_base,documents,indexing,text2sql,celery
+        uv run celery -A src.tasks.celery_app worker --loglevel=info --concurrency=4 --queues=knowledge_base,documents,indexing,text2sql,resource_discovery,celery
       "
     healthcheck:
       test: ["CMD-SHELL", "uv run celery -A src.tasks.celery_app inspect ping"]
@@ -124,7 +124,6 @@ services:
     networks:
       - deer-flow-network
 
-  后端API服务（包含WebSocket支持）
   backend:
     build:
       context: .

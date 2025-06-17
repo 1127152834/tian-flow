@@ -23,7 +23,7 @@ export async function generateMetadata({
   const t = await getTranslations({ locale, namespace: 'landing.hero' });
 
   return {
-    title: "🦌 DeerFlow",
+    title: "💡 Olight",
     description: t('subtitle'),
     icons: [{ rel: "icon", url: "/favicon.ico" }],
   };
@@ -51,7 +51,7 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <head>
-        <script>{`window.__deerflowConfig = ${JSON.stringify(conf)}`}</script>
+        <script>{`window.__olightConfig = ${JSON.stringify(conf)}`}</script>
         {/* Define isSpace function globally to fix markdown-it issues with Next.js + Turbopack
           https://github.com/markdown-it/markdown-it/issues/1082#issuecomment-2749656365 */}
         <Script id="markdown-it-fix" strategy="beforeInteractive">

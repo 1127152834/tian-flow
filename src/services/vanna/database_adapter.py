@@ -139,8 +139,6 @@ class DatabaseAdapter:
         """
         Execute SQL query synchronously and return pandas DataFrame
 
-        This is a simplified implementation for testing
-
         Args:
             sql: SQL query statement
             limit: Result limit (default 1000 rows)
@@ -149,23 +147,90 @@ class DatabaseAdapter:
             Query result DataFrame
         """
         try:
-            # Return mock data for now
-            logger.info(f"Mock SQL execution: {sql[:50]}...")
+            logger.info(f"Executing SQL synchronously: {sql[:100]}...")
 
-            # Create mock DataFrame
-            mock_data = {
-                'id': [1, 2, 3],
-                'name': ['User 1', 'User 2', 'User 3'],
-                'email': ['user1@example.com', 'user2@example.com', 'user3@example.com']
-            }
+            # Get datasource configuration synchronously
+            import asyncio
 
-            df = pd.DataFrame(mock_data)
-            logger.info(f"Mock SQL execution successful, returned {len(df)} rows")
-            return df
+            # Create a new event loop if none exists
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # Get datasource and engine
+            if loop.is_running():
+                # If loop is already running, we need to use a different approach
+                datasource = self._get_datasource_sync()
+                engine = self._get_engine_sync(datasource)
+            else:
+                # If no loop is running, we can use async methods
+                datasource = loop.run_until_complete(self._get_datasource())
+                engine = loop.run_until_complete(self._get_engine())
+
+            # Check readonly mode and operation permissions
+            if datasource.readonly_mode:
+                sql_upper = sql.upper().strip()
+                allowed_ops = [op.upper() for op in datasource.allowed_operations]
+
+                is_allowed = any(sql_upper.startswith(op) for op in allowed_ops)
+                if not is_allowed:
+                    raise ValueError(f"Operation not allowed. Only allowed: {datasource.allowed_operations}")
+
+            # Add LIMIT restriction
+            if limit and 'LIMIT' not in sql.upper():
+                sql = f"{sql.rstrip(';')} LIMIT {limit}"
+
+            # Execute query
+            with engine.connect() as conn:
+                result = conn.execute(text(sql))
+
+                # Get column names
+                columns = list(result.keys()) if result.keys() else []
+
+                # Get data
+                rows = result.fetchall()
+
+                # Create DataFrame
+                df = pd.DataFrame(rows, columns=columns)
+
+                logger.info(f"SQL sync execution successful, returned {len(df)} rows")
+                return df
 
         except Exception as e:
             logger.error(f"SQL sync execution failed: {e}")
             raise
+
+    def _get_datasource_sync(self) -> 'DatabaseDatasource':
+        """Get datasource configuration synchronously"""
+        if self._datasource is None:
+            # Use synchronous database access
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                self._datasource = loop.run_until_complete(self.db_service.get_datasource(self.datasource_id))
+                if not self._datasource:
+                    raise ValueError(f"Datasource {self.datasource_id} not found")
+            finally:
+                loop.close()
+        return self._datasource
+
+    def _get_engine_sync(self, datasource: 'DatabaseDatasource'):
+        """Get database engine synchronously"""
+        if self._engine is None:
+            # Build connection URL based on database type
+            if datasource.database_type == DatabaseType.MYSQL:
+                url = f"mysql+pymysql://{datasource.username}:{datasource.password}@{datasource.host}:{datasource.port}/{datasource.database_name}"
+            elif datasource.database_type == DatabaseType.POSTGRESQL:
+                url = f"postgresql+psycopg2://{datasource.username}:{datasource.password}@{datasource.host}:{datasource.port}/{datasource.database_name}"
+            else:
+                raise ValueError(f"Unsupported database type: {datasource.database_type}")
+
+            self._engine = create_engine(url)
+
+        return self._engine
     
     async def get_table_schema(self, table_name: str) -> Dict[str, Any]:
         """

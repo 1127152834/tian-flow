@@ -18,32 +18,196 @@ from src.models.resource_discovery import (
     VectorizationStatus
 )
 from src.llms.embedding import embed_query, get_embedding_dimension
+from src.config.resource_discovery import ResourceDiscoveryConfig, ResourceConfig
 
 logger = logging.getLogger(__name__)
 
 
 class ResourceVectorizer:
-    """资源向量化器 - 智能向量化资源"""
+    """资源向量化器 - 配置驱动的智能向量化资源"""
 
-    def __init__(self, embedding_service=None):
+    def __init__(self, config: Optional[ResourceDiscoveryConfig] = None):
         """
         初始化向量化器
 
         Args:
-            embedding_service: 嵌入服务，用于生成向量（已弃用，使用统一的嵌入服务）
+            config: 资源发现配置，如果为None则使用默认配置
         """
+        from src.config.resource_discovery import get_resource_discovery_config
+
+        self.config = config or get_resource_discovery_config()
+
         # 使用统一的嵌入服务
         self.embedding_dimension = get_embedding_dimension("BASE_EMBEDDING")
-        self.max_concurrent_tasks = 5
-        self.request_timeout = 30.0
+
+        # 从配置中获取参数
+        self.max_concurrent_tasks = self.config.vector_config.batch_size // 20 or 5
+        self.request_timeout = float(self.config.vector_config.timeout_seconds)
         self.batch_delay = 0.1
 
-        logger.info(f"初始化资源向量化器:")
+        logger.info(f"初始化配置驱动的资源向量化器:")
         logger.info(f"  向量维度: {self.embedding_dimension}")
         logger.info(f"  最大并发数: {self.max_concurrent_tasks}")
         logger.info(f"  请求超时: {self.request_timeout}s")
+        logger.info(f"  配置资源数: {len(self.config.get_enabled_resources())}")
         logger.info(f"  使用统一嵌入服务: BASE_EMBEDDING")
-    
+
+    async def vectorize_resource_from_config(
+        self,
+        session: Session,
+        table_name: str,
+        record_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """基于配置向量化资源"""
+        try:
+            # 查找对应的资源配置
+            resource_config = self.config.get_resource_by_table(table_name)
+            if not resource_config:
+                logger.warning(f"未找到表 {table_name} 的配置")
+                return {"success": False, "error": "未找到配置"}
+
+            logger.info(f"开始配置驱动向量化: {table_name}")
+
+            # 提取配置的字段
+            field_values = {}
+            for field in resource_config.fields:
+                value = record_data.get(field, "")
+                if value:
+                    field_values[field] = str(value)
+
+            if not field_values:
+                logger.warning(f"表 {table_name} 的配置字段都为空")
+                return {"success": False, "error": "配置字段为空"}
+
+            # 构建复合文本
+            composite_text = self._build_composite_text_from_config(
+                resource_config, field_values, record_data
+            )
+
+            # 生成向量
+            embedding = await self._get_embedding(composite_text)
+            if not embedding:
+                return {"success": False, "error": "向量生成失败"}
+
+            # 构建资源ID
+            resource_id = f"{table_name}_{record_data.get('id', 'unknown')}"
+
+            # 先确保资源注册表记录存在
+            await self._ensure_resource_registry_exists(
+                session, resource_id, table_name, resource_config, record_data
+            )
+
+            # 保存向量
+            vector_saved = await self._save_vector_to_db(
+                session, resource_id, VectorType.COMPOSITE, {
+                    "content": composite_text,
+                    "embedding": embedding
+                }
+            )
+
+            if vector_saved:
+                logger.info(f"配置驱动向量化成功: {resource_id}")
+                return {
+                    "success": True,
+                    "resource_id": resource_id,
+                    "table_name": table_name,
+                    "tool": resource_config.tool,
+                    "content": composite_text,
+                    "vector_dimension": len(embedding)
+                }
+            else:
+                return {"success": False, "error": "向量保存失败"}
+
+        except Exception as e:
+            logger.error(f"配置驱动向量化失败 {table_name}: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _build_composite_text_from_config(
+        self,
+        resource_config: ResourceConfig,
+        field_values: Dict[str, str],
+        record_data: Dict[str, Any]
+    ) -> str:
+        """基于配置构建复合文本"""
+        parts = []
+
+        # 添加表信息
+        parts.append(f"表: {resource_config.table}")
+        parts.append(f"工具: {resource_config.tool}")
+
+        # 添加描述
+        if resource_config.description:
+            parts.append(f"描述: {resource_config.description}")
+
+        # 添加配置字段的值
+        for field, value in field_values.items():
+            if value and value.strip():
+                parts.append(f"{field}: {value.strip()}")
+
+        # 添加其他有用的字段（如果存在）
+        additional_fields = ["category", "type", "status", "tags"]
+        for field in additional_fields:
+            if field in record_data and record_data[field]:
+                parts.append(f"{field}: {record_data[field]}")
+
+        return " | ".join(parts)
+
+    async def _ensure_resource_registry_exists(
+        self,
+        session: Session,
+        resource_id: str,
+        table_name: str,
+        resource_config: ResourceConfig,
+        record_data: Dict[str, Any]
+    ):
+        """确保资源注册表记录存在"""
+        try:
+            # 检查记录是否存在
+            check_query = text("""
+                SELECT id FROM resource_discovery.resource_registry
+                WHERE resource_id = :resource_id
+            """)
+            existing = session.execute(check_query, {"resource_id": resource_id}).fetchone()
+
+            if not existing:
+                # 创建新记录
+                from src.services.resource_discovery.incremental_updater import IncrementalUpdater
+                updater = IncrementalUpdater(self.config)
+
+                # 推断资源类型
+                resource_type = updater._infer_resource_type(table_name)
+
+                # 构建资源名称
+                name_field = record_data.get('name') or record_data.get('title') or f"{table_name} 资源"
+
+                insert_query = text("""
+                    INSERT INTO resource_discovery.resource_registry
+                    (resource_id, resource_name, resource_type, description,
+                     source_table, source_id, vectorization_status,
+                     vector_updated_at, created_at, updated_at, is_active)
+                    VALUES (:resource_id, :resource_name, :resource_type, :description,
+                            :source_table, :source_id, 'pending',
+                            :updated_at, :updated_at, :updated_at, true)
+                """)
+
+                session.execute(insert_query, {
+                    "resource_id": resource_id,
+                    "resource_name": str(name_field),
+                    "resource_type": resource_type,
+                    "description": resource_config.description or f"来自 {table_name} 的资源",
+                    "source_table": table_name,
+                    "source_id": str(record_data.get('id', 'unknown')),
+                    "updated_at": datetime.now()
+                })
+
+                session.commit()
+                logger.debug(f"创建资源注册表记录: {resource_id}")
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"确保资源注册表记录存在失败: {e}")
+            raise
+
     async def vectorize_resource(self, session: Session, resource: Dict[str, Any]) -> Dict[str, Any]:
         """向量化单个资源"""
         try:

@@ -13,11 +13,11 @@ from sqlalchemy import DateTime, Text
 
 class ResourceType(str, Enum):
     """资源类型枚举"""
-    DATABASE = "database"
-    API = "api"
-    TOOL = "tool"
-    KNOWLEDGE_BASE = "knowledge_base"
-    TEXT2SQL = "text2sql"
+    DATABASE = "DATABASE"
+    API = "API"
+    TOOL = "TOOL"
+    KNOWLEDGE_BASE = "KNOWLEDGE_BASE"
+    TEXT2SQL = "TEXT2SQL"
 
 
 class ResourceStatus(str, Enum):

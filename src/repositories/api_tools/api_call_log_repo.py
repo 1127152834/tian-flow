@@ -188,13 +188,23 @@ class APICallLogRepository:
         
         # 成功率
         success_rate = (success_calls / total_calls * 100) if total_calls > 0 else 0
-        
+
+        # 今日调用次数
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_query = db_session.query(APICallLog).filter(
+            APICallLog.created_at >= today_start
+        )
+        if api_definition_id:
+            today_query = today_query.filter(APICallLog.api_definition_id == api_definition_id)
+        calls_today = today_query.count()
+
         return {
             "total_calls": total_calls,
             "success_calls": success_calls,
             "failed_calls": failed_calls,
             "average_response_time": round(avg_response_time, 2),
             "success_rate": round(success_rate, 2),
+            "calls_today": calls_today,
             "period_days": days,
             "start_date": start_date,
             "end_date": end_date

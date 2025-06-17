@@ -12,8 +12,8 @@ const geist = Geist({
 });
 
 export const metadata = {
-  title: "DeerFlow - Deep Research at Your Fingertips",
-  description: "Meet DeerFlow, your personal Deep Research assistant",
+  title: "Olight - Deep Research at Your Fingertips",
+  description: "Meet Olight, your personal Deep Research assistant",
 };
 
 export default function RootLayout({

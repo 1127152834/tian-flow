@@ -359,21 +359,35 @@ class ResourceSynchronizer:
                     if change_type == "added":
                         # 新增资源
                         if await self._register_resource_to_db(session, change["resource"]):
-                            await self.vectorizer.vectorize_resource(session, change["resource"])
-                            successful_changes += 1
-                            batch_successful += 1
-                            change_summary["added"] += 1
+                            # 向量化新增的资源
+                            vectorization_result = await self.vectorizer.vectorize_resource(session, change["resource"])
+                            if vectorization_result.get("vectorization_status") == "completed":
+                                successful_changes += 1
+                                batch_successful += 1
+                                change_summary["added"] += 1
+                            else:
+                                logger.warning(f"资源 {resource_id} 注册成功但向量化失败")
+                                failed_changes += 1
+                                batch_failed += 1
                         else:
                             failed_changes += 1
                             batch_failed += 1
 
                     elif change_type == "modified":
-                        # 修改资源
+                        # 修改资源 - 需要重新向量化
                         if await self._update_resource_in_db(session, change["resource"]):
-                            await self.vectorizer.vectorize_resource(session, change["resource"])
-                            successful_changes += 1
-                            batch_successful += 1
-                            change_summary["modified"] += 1
+                            # 删除旧的向量数据
+                            await self._delete_resource_vectors(session, resource_id)
+                            # 重新向量化修改的资源
+                            vectorization_result = await self.vectorizer.vectorize_resource(session, change["resource"])
+                            if vectorization_result.get("vectorization_status") == "completed":
+                                successful_changes += 1
+                                batch_successful += 1
+                                change_summary["modified"] += 1
+                            else:
+                                logger.warning(f"资源 {resource_id} 更新成功但向量化失败")
+                                failed_changes += 1
+                                batch_failed += 1
                         else:
                             failed_changes += 1
                             batch_failed += 1
@@ -431,7 +445,7 @@ class ResourceSynchronizer:
             })
             session.commit()
             return True
-            
+
         except Exception as e:
             session.rollback()
             logger.error(f"注册资源失败: {e}")
@@ -473,20 +487,68 @@ class ResourceSynchronizer:
     async def _delete_resource_from_db(self, session: Session, resource_id: str) -> bool:
         """从数据库中删除资源"""
         try:
+            # 先删除向量数据
+            await self._delete_resource_vectors(session, resource_id)
+
+            # 再删除资源注册数据
             delete_query = text("""
-                DELETE FROM resource_discovery.resource_registry 
+                DELETE FROM resource_discovery.resource_registry
                 WHERE resource_id = :resource_id
             """)
-            
+
             session.execute(delete_query, {"resource_id": resource_id})
             session.commit()
             return True
-            
+
         except Exception as e:
             session.rollback()
             logger.error(f"删除资源失败: {e}")
             return False
-    
+
+    async def _delete_resource_vectors(self, session: Session, resource_id: str) -> bool:
+        """删除资源的向量数据"""
+        try:
+            delete_vectors_query = text("""
+                DELETE FROM resource_discovery.resource_vectors
+                WHERE resource_id = :resource_id
+            """)
+
+            session.execute(delete_vectors_query, {"resource_id": resource_id})
+            session.commit()
+            logger.info(f"删除资源 {resource_id} 的向量数据")
+            return True
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"删除资源向量失败 {resource_id}: {e}")
+            return False
+
+    async def _update_vectorization_status(
+        self,
+        session: Session,
+        resource_id: str,
+        status: VectorizationStatus
+    ) -> bool:
+        """更新资源的向量化状态"""
+        try:
+            update_query = text("""
+                UPDATE resource_discovery.resource_registry
+                SET vectorization_status = :status, updated_at = CURRENT_TIMESTAMP
+                WHERE resource_id = :resource_id
+            """)
+
+            session.execute(update_query, {
+                "resource_id": resource_id,
+                "status": status.value
+            })
+            session.commit()
+            return True
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"更新向量化状态失败 {resource_id}: {e}")
+            return False
+
     async def _cleanup_existing_data(self, session: Session):
         """清理现有数据"""
         try:

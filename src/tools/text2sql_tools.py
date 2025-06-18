@@ -402,12 +402,11 @@ def generate_sql_only(
 
 
 @tool
-@log_io
 def smart_text2sql_query(
-    question: Annotated[str, "自然语言问题"],
-    database_id: Annotated[Optional[int], "数据库ID，不指定则使用默认数据库"] = None,
-    auto_chart: Annotated[bool, "是否自动生成图表"] = True,
-    chart_title: Annotated[str, "图表标题"] = ""
+    question: str,
+    database_id: Optional[int] = None,
+    auto_chart: bool = True,
+    chart_title: str = ""
 ) -> str:
     """
     智能Text2SQL查询工具 - 支持自动图表生成
@@ -525,34 +524,32 @@ def smart_text2sql_query(
         elif auto_chart:
             response_data["chart_info"] = {"status": "disabled", "reason": "数据量不足"}
 
-        return ToolResult(
-            success=True,
-            message=message,
-            data=response_data,
-            metadata={
-                "question": question,
-                "database_id": database_id,
-                "execution_time": execution_result.execution_time if hasattr(execution_result, 'execution_time') else "0.05s",
-                "auto_chart": auto_chart,
-                "query_id": generation_result.query_id
-            }
-        ).to_json()
+        # 返回简洁的文本描述，而不是JSON
+        result_summary = f"✅ {message}\n\n"
+        result_summary += f"📊 生成的SQL:\n```sql\n{generated_sql}\n```\n\n"
+
+        if results:
+            result_summary += f"📋 查询结果（前5行）:\n"
+            for i, row in enumerate(results[:5]):
+                result_summary += f"{i+1}. {dict(row)}\n"
+
+            if row_count > 5:
+                result_summary += f"... 还有 {row_count - 5} 行数据\n"
+
+        if auto_chart and response_data.get("chart_info", {}).get("status") == "generating":
+            result_summary += f"\n📈 {chart_config['type']}图表正在生成中..."
+
+        return result_summary
 
     except Exception as e:
         logger.error(f"❌ 智能Text2SQL查询异常: {e}")
-        return ToolResult(
-            success=False,
-            message="智能Text2SQL查询过程中发生异常",
-            error=str(e),
-            metadata={"question": question, "database_id": database_id}
-        ).to_json()
+        return f"❌ 查询失败: {str(e)}"
 
 
 @tool
-@log_io
 def get_training_examples(
-    keyword: Annotated[Optional[str], "关键词过滤"] = None,
-    limit: Annotated[int, "返回数量限制"] = 10
+    keyword: Optional[str] = None,
+    limit: int = 10
 ) -> str:
     """
     获取Text2SQL训练示例
@@ -613,37 +610,30 @@ def get_training_examples(
                 }
                 examples.append(example)
             
-            return ToolResult(
-                success=True,
-                message=f"找到 {len(examples)} 个训练示例",
-                data={
-                    "examples": examples,
-                    "total_count": len(examples)
-                },
-                metadata={
-                    "keyword_filter": keyword,
-                    "limit": limit
-                }
-            ).to_json()
+            result_text = f"📚 找到 {len(examples)} 个训练示例:\n\n"
+            for i, example in enumerate(examples[:5]):  # 只显示前5个
+                result_text += f"{i+1}. 数据源{example['datasource_id']}: {example['question']}\n"
+                if example['sql_query']:
+                    result_text += f"   SQL: {example['sql_query'][:100]}...\n"
+                result_text += "\n"
+
+            if len(examples) > 5:
+                result_text += f"... 还有 {len(examples) - 5} 个示例\n"
+
+            return result_text
         
         finally:
             session.close()
     
     except Exception as e:
         logger.error(f"❌ 获取训练示例异常: {e}")
-        return ToolResult(
-            success=False,
-            message="获取训练示例过程中发生异常",
-            error=str(e),
-            metadata={"keyword": keyword, "limit": limit}
-        ).to_json()
+        return f"❌ 获取训练示例失败: {str(e)}"
 
 
 @tool
-@log_io
 def validate_sql(
-    sql: Annotated[str, "要验证的SQL语句"],
-    database_id: Annotated[Optional[int], "数据库ID"] = None
+    sql: str,
+    database_id: Optional[int] = None
 ) -> str:
     """
     验证SQL语句
@@ -663,44 +653,17 @@ def validate_sql(
         found_dangerous = [kw for kw in dangerous_keywords if kw in sql_upper]
         
         if found_dangerous:
-            return ToolResult(
-                success=False,
-                message="SQL包含危险操作",
-                error=f"发现危险关键词: {', '.join(found_dangerous)}",
-                data={"sql": sql, "dangerous_keywords": found_dangerous}
-            ).to_json()
+            return f"❌ SQL包含危险操作，发现危险关键词: {', '.join(found_dangerous)}"
         
         # 基本语法检查
         if not sql.strip().upper().startswith("SELECT"):
-            return ToolResult(
-                success=False,
-                message="只支持SELECT查询",
-                error="SQL必须以SELECT开头",
-                data={"sql": sql}
-            ).to_json()
+            return "❌ 只支持SELECT查询，SQL必须以SELECT开头"
         
         # TODO: 更详细的SQL语法验证
         # 可以集成SQL解析器进行更严格的验证
         
-        return ToolResult(
-            success=True,
-            message="SQL验证通过",
-            data={
-                "sql": sql,
-                "is_safe": True,
-                "query_type": "SELECT"
-            },
-            metadata={
-                "database_id": database_id,
-                "validation_rules": ["安全关键词检查", "查询类型检查"]
-            }
-        ).to_json()
+        return f"✅ SQL验证通过，查询类型: SELECT，安全检查: 通过"
     
     except Exception as e:
         logger.error(f"❌ SQL验证异常: {e}")
-        return ToolResult(
-            success=False,
-            message="SQL验证过程中发生异常",
-            error=str(e),
-            metadata={"sql": sql, "database_id": database_id}
-        ).to_json()
+        return f"❌ SQL验证失败: {str(e)}"

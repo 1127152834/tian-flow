@@ -28,139 +28,23 @@ function SystemOverview() {
   const [syncing, setSyncing] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [syncTaskId, setSyncTaskId] = useState<string | null>(null);
-  const [syncProgress, setSyncProgress] = useState(0);
-  const [syncMessage, setSyncMessage] = useState('');
-  const [syncStep, setSyncStep] = useState('');
   const [discoveryResult, setDiscoveryResult] = useState<any>(null);
-  const [websocket, setWebsocket] = useState<WebSocket | null>(null);
+  const [detailedStats, setDetailedStats] = useState<any>(null);
 
   useEffect(() => {
     fetchStatistics();
   }, []);
 
-  // WebSocket连接管理
-  const connectWebSocket = (taskId: string) => {
-    // 关闭现有连接
-    if (websocket) {
-      websocket.close();
-    }
-
-    // 创建新的WebSocket连接 - 使用动态URL
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
-    const port = '8000'; // 后端端口
-    const wsUrl = `${protocol}//${host}:${port}/api/ws/progress/${taskId}`;
-    console.log('连接WebSocket:', wsUrl);
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      console.log('WebSocket连接已建立:', taskId);
-      setWebsocket(ws);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('收到WebSocket消息:', data);
-
-        // 更新进度信息
-        setSyncProgress(data.progress || 0);
-        setSyncMessage(data.message || '');
-        setSyncStep(data.current_step || '');
-
-        if (data.status === 'completed') {
-          setSyncing(false);
-          setSyncTaskId(null);
-          setSyncProgress(100);
-          setSyncMessage('同步完成');
-          toast.success('同步完成', {
-            description: '资源同步和向量化已完成'
-          });
-          fetchStatistics();
-          ws.close();
-        } else if (data.status === 'failed') {
-          setSyncing(false);
-          setSyncTaskId(null);
-          setSyncProgress(0);
-          setSyncMessage('同步失败');
-          toast.error('同步失败', {
-            description: data.error || '同步过程中发生错误'
-          });
-          ws.close();
-        }
-      } catch (error) {
-        console.error('解析WebSocket消息失败:', error);
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket错误:', error);
-      toast.error('连接错误', {
-        description: '无法建立实时连接，将使用轮询方式'
-      });
-      // 回退到轮询方式
-      fallbackToPolling(taskId);
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket连接已关闭');
-      setWebsocket(null);
-    };
-  };
-
-  // 回退到轮询方式
-  const fallbackToPolling = (taskId: string) => {
-    const interval = setInterval(async () => {
-      try {
-        const taskStatus = await resourceDiscoveryApi.getTaskStatus(taskId);
-
-        setSyncProgress(taskStatus.progress || 0);
-        setSyncMessage(taskStatus.message || '');
-        setSyncStep(taskStatus.current_step || '');
-
-        if (taskStatus.status === 'completed') {
-          setSyncing(false);
-          setSyncTaskId(null);
-          setSyncProgress(100);
-          setSyncMessage('同步完成');
-          toast.success('同步完成', {
-            description: '资源同步和向量化已完成'
-          });
-          fetchStatistics();
-          clearInterval(interval);
-        } else if (taskStatus.status === 'failed') {
-          setSyncing(false);
-          setSyncTaskId(null);
-          setSyncProgress(0);
-          setSyncMessage('同步失败');
-          toast.error('同步失败', {
-            description: taskStatus.error || '同步过程中发生错误'
-          });
-          clearInterval(interval);
-        }
-      } catch (error) {
-        console.error('轮询检查任务状态失败:', error);
-      }
-    }, 2000);
-
-    // 清理函数
-    setTimeout(() => clearInterval(interval), 300000); // 5分钟后停止轮询
-  };
-
-  // 监控同步任务进度
+  // 定时刷新统计数据
   useEffect(() => {
-    if (syncTaskId && syncing) {
-      // 优先使用WebSocket
-      connectWebSocket(syncTaskId);
-    }
-
-    // 清理函数
-    return () => {
-      if (websocket) {
-        websocket.close();
+    const interval = setInterval(() => {
+      if (!syncing && !discovering) {
+        fetchStatistics();
       }
-    };
-  }, [syncTaskId, syncing]);
+    }, 10000); // 每10秒刷新一次
+
+    return () => clearInterval(interval);
+  }, [syncing, discovering]);
 
   const fetchStatistics = async () => {
     try {
@@ -179,6 +63,9 @@ function SystemOverview() {
         vectorizedResources,
         avgResponseTime: matchStats.avg_response_time || 0
       });
+
+      // 保存详细统计信息
+      setDetailedStats(data);
     } catch (error) {
       console.error('Failed to fetch statistics:', error);
       toast.error('获取统计信息失败', {
@@ -291,10 +178,13 @@ function SystemOverview() {
               {stats.activeResources} 活跃资源
             </p>
             <div className="mt-2 text-xs text-muted-foreground">
-              <div>• API: 4个</div>
-              <div>• 数据库: 4个</div>
-              <div>• 工具: 4个</div>
-              <div>• Text2SQL: 434个</div>
+              {detailedStats?.resource_statistics ? (
+                Object.entries(detailedStats.resource_statistics).map(([type, stat]: [string, any]) => (
+                  <div key={type}>• {type}: {stat.total}个</div>
+                ))
+              ) : (
+                <div>加载中...</div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -310,8 +200,16 @@ function SystemOverview() {
               {stats.totalResources > 0 ? Math.round(stats.vectorizedResources / stats.totalResources * 100) : 0}% 完成率
             </p>
             <div className="mt-2 text-xs text-muted-foreground">
-              <div>• 已完成: {stats.vectorizedResources}个</div>
-              <div>• 待处理: {stats.totalResources - stats.vectorizedResources}个</div>
+              {detailedStats?.vectorization_breakdown ? (
+                Object.entries(detailedStats.vectorization_breakdown).map(([status, count]: [string, any]) => (
+                  <div key={status}>• {status === 'completed' ? '已完成' : status === 'pending' ? '待处理' : status}: {count}个</div>
+                ))
+              ) : (
+                <>
+                  <div>• 已完成: {stats.vectorizedResources}个</div>
+                  <div>• 待处理: {stats.totalResources - stats.vectorizedResources}个</div>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -330,6 +228,61 @@ function SystemOverview() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 详细向量化状态 */}
+      {detailedStats?.resource_statistics && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">向量化详细状态</CardTitle>
+            <CardDescription>
+              各类型资源的向量化进度
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Object.entries(detailedStats.resource_statistics).map(([type, stat]: [string, any]) => (
+                <div key={type} className="p-3 border rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-medium">{type}</span>
+                    <Badge variant={stat.vectorized === stat.total ? "default" : "secondary"}>
+                      {stat.vectorized}/{stat.total}
+                    </Badge>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${stat.total > 0 ? (stat.vectorized / stat.total) * 100 : 0}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {stat.total > 0 ? Math.round((stat.vectorized / stat.total) * 100) : 0}% 完成
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 总体向量化状态 */}
+            {detailedStats.vectorization_breakdown && (
+              <div className="mt-4 pt-4 border-t">
+                <h4 className="font-medium mb-2">总体状态分布</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {Object.entries(detailedStats.vectorization_breakdown).map(([status, count]: [string, any]) => (
+                    <div key={status} className="text-center p-2 bg-muted rounded">
+                      <div className="text-lg font-bold">{count}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {status === 'completed' ? '已完成' :
+                         status === 'pending' ? '待处理' :
+                         status === 'in_progress' ? '处理中' :
+                         status === 'failed' ? '失败' : status}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* 操作按钮 */}
       <div className="space-y-3">
@@ -430,31 +383,18 @@ function SystemOverview() {
       {/* 同步进度提示 */}
       {syncing && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-              <span className="text-sm text-blue-800 font-medium">
-                智能资源同步进行中...
-              </span>
-            </div>
-
-            {/* 进度条 */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs text-blue-700">
-                <span>{syncStep || '准备中...'}</span>
-                <span>{syncProgress}%</span>
-              </div>
-              <div className="w-full bg-blue-200 rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
-                  style={{ width: `${syncProgress}%` }}
-                ></div>
-              </div>
-              {syncMessage && (
-                <p className="text-xs text-blue-600 mt-1">{syncMessage}</p>
-              )}
-            </div>
+          <div className="flex items-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span className="text-sm text-blue-800 font-medium">
+              智能资源同步进行中...
+            </span>
           </div>
+          <p className="text-xs text-blue-600 mt-2">
+            任务ID: {syncTaskId || '未知'}
+          </p>
+          <p className="text-xs text-blue-600">
+            请等待任务完成，统计数据将自动更新
+          </p>
         </div>
       )}
     </div>

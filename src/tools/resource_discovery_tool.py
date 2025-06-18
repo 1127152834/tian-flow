@@ -50,12 +50,11 @@ class ToolResult:
 
 
 @tool
-@log_io
 def discover_resources(
-    query: Annotated[str, "用户查询或问题描述"],
-    resource_types: Annotated[Optional[List[str]], "资源类型过滤，如 ['API', 'DATABASE', 'TEXT2SQL']"] = None,
-    top_k: Annotated[int, "返回的最大资源数量"] = 5,
-    min_confidence: Annotated[float, "最小置信度阈值 (0.0-1.0)"] = 0.3
+    query: str,
+    resource_types: Optional[List[str]] = None,
+    top_k: int = 5,
+    min_confidence: float = 0.3
 ) -> str:
     """
     智能体资源发现工具
@@ -107,27 +106,12 @@ def discover_resources(
                 ))
             
             if not matches:
-                return ToolResult(
-                    success=True,
-                    message="未找到匹配的资源",
-                    data={
-                        "query": query,
-                        "matches": [],
-                        "total_matches": 0,
-                        "suggestions": [
-                            "尝试使用更通用的关键词",
-                            "检查拼写是否正确",
-                            "降低置信度阈值"
-                        ]
-                    },
-                    metadata={
-                        "search_params": {
-                            "resource_types": resource_types,
-                            "top_k": top_k,
-                            "min_confidence": min_confidence
-                        }
-                    }
-                ).to_json()
+                return """🔍 未找到匹配的资源
+
+建议：
+- 尝试使用更通用的关键词
+- 检查拼写是否正确
+- 降低置信度阈值"""
             
             # 转换匹配结果为智能体友好的格式
             agent_resources = []
@@ -141,27 +125,14 @@ def discover_resources(
                     if tool_methods:
                         tool_name = tool_methods[0]  # 使用第一个工具作为主要工具
                 
-                # 如果没有从元数据获取到工具，尝试从配置获取
+                # 如果没有从元数据获取到工具，根据资源类型推荐工具
                 if not tool_name:
-                    # 尝试直接匹配表名
-                    resource_config = config.get_resource_by_table(resource.source_table)
-                    if not resource_config and resource.source_table:
-                        # 如果直接匹配失败，尝试匹配带schema的表名
-                        for config_resource in config.get_enabled_resources():
-                            config_table = config_resource.table
-                            # 检查是否是schema.table格式，如果是，提取table部分进行匹配
-                            if '.' in config_table:
-                                table_name = config_table.split('.')[-1]
-                                if table_name == resource.source_table:
-                                    resource_config = config_resource
-                                    break
-                            # 也检查完整匹配
-                            elif config_table == resource.source_table:
-                                resource_config = config_resource
-                                break
-
-                    if resource_config:
-                        tool_name = resource_config.tool
+                    if resource.resource_type == "DATABASE":
+                        tool_name = "smart_text2sql_query"  # 数据库资源推荐使用智能SQL查询工具
+                    elif resource.resource_type == "API":
+                        tool_name = "execute_api"
+                    elif resource.resource_type == "TEXT2SQL":
+                        tool_name = "smart_text2sql_query"
                 
                 agent_resource = {
                     "resource_id": resource.resource_id,
@@ -181,43 +152,39 @@ def discover_resources(
                 }
                 agent_resources.append(agent_resource)
             
-            # 生成整体建议
-            overall_suggestions = _generate_overall_suggestions(agent_resources, query)
-            
-            return ToolResult(
-                success=True,
-                message=f"找到 {len(agent_resources)} 个相关资源",
-                data={
-                    "query": query,
-                    "matches": agent_resources,
-                    "total_matches": len(agent_resources),
-                    "best_match": agent_resources[0] if agent_resources else None,
-                    "suggestions": overall_suggestions
-                },
-                metadata={
-                    "search_params": {
-                        "resource_types": resource_types,
-                        "top_k": top_k,
-                        "min_confidence": min_confidence
-                    },
-                    "config_info": {
-                        "total_configured_resources": len(config.get_enabled_resources()),
-                        "available_tools": config.get_all_tools()
-                    }
-                }
-            ).to_json()
+            # 生成简洁的文本响应
+            result_text = f"🎯 找到 {len(agent_resources)} 个相关资源:\n\n"
+
+            for i, resource in enumerate(agent_resources[:3]):  # 只显示前3个
+                result_text += f"{i+1}. **{resource['resource_name']}** ({resource['resource_type']})\n"
+                result_text += f"   置信度: {resource['confidence']:.2f}\n"
+                result_text += f"   描述: {resource['description']}\n"
+                if resource['recommended_tool']:
+                    result_text += f"   推荐工具: {resource['recommended_tool']}\n"
+                result_text += "\n"
+
+            if len(agent_resources) > 3:
+                result_text += f"... 还有 {len(agent_resources) - 3} 个资源\n\n"
+
+            # 添加最佳匹配建议
+            if agent_resources:
+                best = agent_resources[0]
+                result_text += f"💡 推荐使用: **{best['resource_name']}**\n"
+                if best['recommended_tool']:
+                    result_text += f"   建议调用工具: `{best['recommended_tool']}`\n"
+                    if best['resource_type'] == 'DATABASE' and 'database_' in best['resource_id']:
+                        # 提取数据库ID
+                        db_id = best['resource_id'].replace('database_', '')
+                        result_text += f"   数据库ID: {db_id}\n"
+
+            return result_text
             
         finally:
             session.close()
             
     except Exception as e:
         logger.error(f"❌ 智能体资源发现失败: {e}")
-        return ToolResult(
-            success=False,
-            message="资源发现过程中发生错误",
-            error=str(e),
-            metadata={"query": query}
-        ).to_json()
+        return f"❌ 资源发现失败: {str(e)}"
 
 
 def _generate_usage_suggestion(resource, tool_name: Optional[str]) -> str:

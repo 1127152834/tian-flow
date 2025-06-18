@@ -35,7 +35,7 @@ RUN \
 
 ##### RUNNER
 
-FROM node:20-alpine AS runner
+FROM gcr.io/distroless/nodejs20-debian12 AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

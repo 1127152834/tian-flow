@@ -190,24 +190,51 @@ function SystemOverview() {
   const handleSync = async () => {
     try {
       setSyncing(true);
-      const result = await resourceDiscoveryApi.syncResources(false);
+      // 使用增量同步API，默认为增量同步（force_full_sync=false）
+      const result = await resourceDiscoveryApi.incrementalSync(false, true);
 
       if (result.success && result.task_id) {
         setSyncTaskId(result.task_id);
-        toast.success('同步任务已启动', {
-          description: result.message || '正在后台执行资源同步...'
+        toast.success('增量同步任务已启动', {
+          description: result.message || '正在后台执行增量资源同步...'
         });
       } else {
         setSyncing(false);
-        toast.error('启动同步失败', {
-          description: result.message || '无法启动同步任务'
+        toast.error('启动增量同步失败', {
+          description: result.message || '无法启动增量同步任务'
         });
       }
     } catch (error) {
       setSyncing(false);
-      console.error('Sync failed:', error);
-      toast.error('同步失败', {
-        description: error instanceof Error ? error.message : '资源同步失败'
+      console.error('Incremental sync failed:', error);
+      toast.error('增量同步失败', {
+        description: error instanceof Error ? error.message : '增量资源同步失败'
+      });
+    }
+  };
+
+  const handleFullSync = async () => {
+    try {
+      setSyncing(true);
+      // 使用增量同步API，但强制全量同步（force_full_sync=true）
+      const result = await resourceDiscoveryApi.incrementalSync(true, true);
+
+      if (result.success && result.task_id) {
+        setSyncTaskId(result.task_id);
+        toast.success('全量同步任务已启动', {
+          description: result.message || '正在后台执行全量资源同步...'
+        });
+      } else {
+        setSyncing(false);
+        toast.error('启动全量同步失败', {
+          description: result.message || '无法启动全量同步任务'
+        });
+      }
+    } catch (error) {
+      setSyncing(false);
+      console.error('Full sync failed:', error);
+      toast.error('全量同步失败', {
+        description: error instanceof Error ? error.message : '全量资源同步失败'
       });
     }
   };
@@ -262,13 +289,30 @@ function SystemOverview() {
       </div>
 
       {/* 操作按钮 */}
-      <div className="flex gap-2">
-        <Button onClick={handleSync} disabled={syncing}>
-          {syncing ? '同步中...' : '同步资源'}
-        </Button>
-        <Button variant="outline" onClick={fetchStatistics} disabled={syncing}>
-          刷新数据
-        </Button>
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <Button onClick={handleSync} disabled={syncing}>
+            {syncing ? '增量同步中...' : '增量同步'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleFullSync()}
+            disabled={syncing}
+          >
+            全量同步
+          </Button>
+          <Button variant="outline" onClick={fetchStatistics} disabled={syncing}>
+            刷新数据
+          </Button>
+        </div>
+
+        {/* 同步说明 */}
+        <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+          <div className="space-y-1">
+            <div><strong>增量同步：</strong>智能检测资源变更，只同步新增、修改或删除的资源，速度快，推荐日常使用</div>
+            <div><strong>全量同步：</strong>重新扫描所有资源并完全重建索引，耗时较长，适用于系统初始化或故障恢复</div>
+          </div>
+        </div>
       </div>
 
       {/* 同步进度提示 */}
@@ -278,7 +322,7 @@ function SystemOverview() {
             <div className="flex items-center gap-2">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
               <span className="text-sm text-blue-800 font-medium">
-                资源同步进行中...
+                智能资源同步进行中...
               </span>
             </div>
 

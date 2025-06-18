@@ -570,6 +570,73 @@ async def detect_resource_changes(
         raise HTTPException(status_code=500, detail=f"检测资源变更失败: {str(e)}")
 
 
+@router.post("/discover", response_model=dict)
+async def discover_resources_manual():
+    """手动发现系统资源"""
+    try:
+        logger.info("🔍 手动发现系统资源")
+
+        # 获取数据库会话
+        session = next(get_db_session())
+
+        try:
+            # 初始化发现服务
+            discovery_service = ResourceDiscoveryService()
+
+            # 发现所有资源
+            discovered_resources = await discovery_service.discover_all_resources(session)
+
+            # 获取已注册的资源
+            existing_query = text("""
+                SELECT resource_id, resource_name, resource_type, vectorization_status,
+                       created_at, updated_at
+                FROM resource_discovery.resource_registry
+                WHERE is_active = true
+            """)
+
+            result = session.execute(existing_query)
+            existing_resources = [dict(row._mapping) for row in result.fetchall()]
+
+            # 分析资源状态
+            existing_ids = {r['resource_id'] for r in existing_resources}
+            discovered_ids = {r['resource_id'] for r in discovered_resources}
+
+            new_resources = [r for r in discovered_resources if r['resource_id'] not in existing_ids]
+            missing_resources = [r for r in existing_resources if r['resource_id'] not in discovered_ids]
+            existing_discovered = [r for r in discovered_resources if r['resource_id'] in existing_ids]
+
+            # 统计向量化状态
+            vectorization_stats = {}
+            for status in ['pending', 'in_progress', 'completed', 'failed']:
+                count = len([r for r in existing_resources if r.get('vectorization_status') == status])
+                vectorization_stats[status] = count
+
+            return {
+                "success": True,
+                "message": f"发现了 {len(discovered_resources)} 个资源",
+                "discovery_summary": {
+                    "total_discovered": len(discovered_resources),
+                    "new_resources": len(new_resources),
+                    "existing_resources": len(existing_discovered),
+                    "missing_resources": len(missing_resources),
+                    "vectorization_stats": vectorization_stats
+                },
+                "resources": {
+                    "new": new_resources[:10],  # 限制返回数量
+                    "existing": existing_discovered[:10],
+                    "missing": missing_resources[:10]
+                },
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+        finally:
+            session.close()
+
+    except Exception as e:
+        logger.error(f"手动资源发现失败: {e}")
+        raise HTTPException(status_code=500, detail=f"手动资源发现失败: {str(e)}")
+
+
 @router.post("/incremental-sync", response_model=dict)
 async def incremental_sync(
     force_full_sync: bool = Query(False, description="是否强制全量同步"),

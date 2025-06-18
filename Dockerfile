@@ -35,9 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # 步骤 3: 安装Python依赖
-# 先只复制 pyproject.toml，这样可以利用Docker层缓存
-# 只要此文件不变，依赖就不会重新安装
-COPY pyproject.toml ./
+# 先只复制 pyproject.toml 和 README.md，这样可以利用Docker层缓存
+# 只要这些文件不变，依赖就不会重新安装
+COPY pyproject.toml README.md ./
 
 # 利用BuildKit缓存并指定清华大学TUNA镜像源来加速uv的安装过程
 RUN --mount=type=cache,target=/root/.cache/uv \

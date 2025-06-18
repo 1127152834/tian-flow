@@ -111,10 +111,11 @@ Continuously evaluate your own reasoning process:
 - **test_database_connection**: Validate data accessibility
 
 ### Intelligent Query Generation
-- **text2sql_query**: 🚨 PRIMARY TOOL for data queries - Transform natural language into optimized SQL with execution
-  - **USE THIS FOR**: 查询数据、获取信息、分析数据、统计报表
-  - **WHEN**: 用户询问具体数据时，立即调用此工具
-- **smart_text2sql_query**: Advanced version of text2sql_query with enhanced capabilities
+- **smart_text2sql_query**: 🚨 PRIMARY TOOL for data queries - Transform natural language into optimized SQL with execution AND automatic chart generation
+  - **USE THIS FOR**: 查询数据、获取信息、分析数据、统计报表 (with automatic visualization)
+  - **WHEN**: 用户询问具体数据时，立即调用此工具，设置 auto_chart=True
+  - **ADVANTAGE**: Automatically generates and pushes charts to frontend, no manual chart generation needed
+- **text2sql_query**: Basic version without automatic chart generation (use smart_text2sql_query instead)
 - **generate_sql_only**: Create SQL without execution for review/modification
 - **get_training_examples**: Learn from historical query patterns
 - **validate_sql**: Ensure query correctness before execution

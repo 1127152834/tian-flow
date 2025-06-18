@@ -362,7 +362,7 @@ def sync_resources_task(self, force_full_sync: bool = False):
         raise Exception(error_msg)
 
 
-@celery_app.task(bind=True, name='incremental_sync_task')
+@celery_app.task(bind=True, name='incremental_sync_task', time_limit=1800, soft_time_limit=1500)
 def incremental_sync_task(self, force_full_sync: bool = False):
     """增量同步任务"""
     logger.info(f"🔄 Starting incremental sync task: force_full={force_full_sync}")

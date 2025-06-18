@@ -148,9 +148,29 @@ class ResourceSynchronizer:
             if await self._register_resource_to_db(session, resource):
                 registered_count += 1
         
-        # 4. 向量化所有资源
-        vectorized_resources = await self.vectorizer.batch_vectorize_resources(session, resources)
-        vectorized_count = sum(1 for r in vectorized_resources if r.get("vectorization_status") == "completed")
+        # 4. 分批向量化所有资源（避免超时）
+        batch_size = 50  # 每批处理50个资源
+        vectorized_count = 0
+        total_batches = (len(resources) + batch_size - 1) // batch_size
+
+        logger.info(f"开始分批向量化 {len(resources)} 个资源，分为 {total_batches} 批")
+
+        for i in range(0, len(resources), batch_size):
+            batch = resources[i:i + batch_size]
+            batch_num = i // batch_size + 1
+
+            logger.info(f"处理第 {batch_num}/{total_batches} 批，包含 {len(batch)} 个资源")
+
+            try:
+                batch_results = await self.vectorizer.batch_vectorize_resources(session, batch)
+                batch_success = sum(1 for r in batch_results if r.get("vectorization_status") == "completed")
+                vectorized_count += batch_success
+
+                logger.info(f"第 {batch_num} 批完成：{batch_success}/{len(batch)} 个资源向量化成功")
+
+            except Exception as e:
+                logger.error(f"第 {batch_num} 批向量化失败: {e}")
+                # 继续处理下一批
         
         # 5. 更新操作状态
         processing_time = datetime.utcnow() - start_time
@@ -307,50 +327,74 @@ class ResourceSynchronizer:
             return str(hash(str(data)))
     
     async def _process_resource_changes(
-        self, 
-        session: Session, 
+        self,
+        session: Session,
         changes: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """处理资源变更"""
+        """处理资源变更（分批处理避免超时）"""
         successful_changes = 0
         failed_changes = 0
         change_summary = {"added": 0, "modified": 0, "deleted": 0}
-        
-        for change in changes:
-            try:
-                change_type = change["change_type"]
-                resource_id = change["resource_id"]
-                
-                if change_type == "added":
-                    # 新增资源
-                    if await self._register_resource_to_db(session, change["resource"]):
-                        await self.vectorizer.vectorize_resource(session, change["resource"])
-                        successful_changes += 1
-                        change_summary["added"] += 1
-                    else:
-                        failed_changes += 1
-                
-                elif change_type == "modified":
-                    # 修改资源
-                    if await self._update_resource_in_db(session, change["resource"]):
-                        await self.vectorizer.vectorize_resource(session, change["resource"])
-                        successful_changes += 1
-                        change_summary["modified"] += 1
-                    else:
-                        failed_changes += 1
-                
-                elif change_type == "deleted":
-                    # 删除资源
-                    if await self._delete_resource_from_db(session, resource_id):
-                        successful_changes += 1
-                        change_summary["deleted"] += 1
-                    else:
-                        failed_changes += 1
-                
-            except Exception as e:
-                logger.error(f"处理变更失败 {change.get('resource_id')}: {e}")
-                failed_changes += 1
-        
+
+        # 分批处理变更，避免超时
+        batch_size = 20  # 每批处理20个变更
+        total_batches = (len(changes) + batch_size - 1) // batch_size
+
+        logger.info(f"开始分批处理 {len(changes)} 个资源变更，分为 {total_batches} 批")
+
+        for i in range(0, len(changes), batch_size):
+            batch = changes[i:i + batch_size]
+            batch_num = i // batch_size + 1
+
+            logger.info(f"处理第 {batch_num}/{total_batches} 批变更，包含 {len(batch)} 个变更")
+
+            batch_successful = 0
+            batch_failed = 0
+
+            for change in batch:
+                try:
+                    change_type = change["change_type"]
+                    resource_id = change["resource_id"]
+
+                    if change_type == "added":
+                        # 新增资源
+                        if await self._register_resource_to_db(session, change["resource"]):
+                            await self.vectorizer.vectorize_resource(session, change["resource"])
+                            successful_changes += 1
+                            batch_successful += 1
+                            change_summary["added"] += 1
+                        else:
+                            failed_changes += 1
+                            batch_failed += 1
+
+                    elif change_type == "modified":
+                        # 修改资源
+                        if await self._update_resource_in_db(session, change["resource"]):
+                            await self.vectorizer.vectorize_resource(session, change["resource"])
+                            successful_changes += 1
+                            batch_successful += 1
+                            change_summary["modified"] += 1
+                        else:
+                            failed_changes += 1
+                            batch_failed += 1
+
+                    elif change_type == "deleted":
+                        # 删除资源
+                        if await self._delete_resource_from_db(session, resource_id):
+                            successful_changes += 1
+                            batch_successful += 1
+                            change_summary["deleted"] += 1
+                        else:
+                            failed_changes += 1
+                            batch_failed += 1
+
+                except Exception as e:
+                    logger.error(f"处理变更失败 {change.get('resource_id')}: {e}")
+                    failed_changes += 1
+                    batch_failed += 1
+
+            logger.info(f"第 {batch_num} 批完成：成功 {batch_successful}，失败 {batch_failed}")
+
         return {
             "successful_changes": successful_changes,
             "failed_changes": failed_changes,

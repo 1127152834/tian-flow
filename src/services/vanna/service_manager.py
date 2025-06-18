@@ -105,6 +105,28 @@ class VannaServiceManager:
 
                         logger.info(f"Found {len(similar_sqls)} similar SQL examples and {len(similar_ddls)} DDL statements")
 
+                        # Check for exact or very similar question match
+                        if similar_sqls:
+                            for example in similar_sqls:
+                                if isinstance(example, dict):
+                                    example_q = example.get('question', '').lower().strip()
+                                    example_sql = example.get('sql', '')
+
+                                    # If we find an exact or very similar question, use the trained SQL directly
+                                    if example_q and example_sql and question.lower().strip() == example_q:
+                                        logger.info(f"🎯 Found exact question match, using trained SQL directly")
+                                        return example_sql
+
+                                    # Check for high similarity (same key words)
+                                    question_words = set(question.lower().split())
+                                    example_words = set(example_q.split())
+                                    common_words = question_words & example_words
+                                    similarity_ratio = len(common_words) / max(len(question_words), len(example_words), 1)
+
+                                    if similarity_ratio > 0.8:  # 80% word overlap
+                                        logger.info(f"🎯 Found high similarity match ({similarity_ratio:.2f}), using trained SQL directly")
+                                        return example_sql
+
                         # Build context for LLM
                         context_parts = []
 
@@ -210,15 +232,15 @@ SQL:"""
 
                     logger.info(f"🚀 Trying fast path for question: {question_lower}")
 
-                    # Common system queries - more comprehensive patterns
+                    # Common system queries - EXACT patterns only
                     table_count_patterns = [
                         '多少张表', '多少个表', '表的数量', '表数量', '有多少表',
                         'how many tables', 'count tables', 'table count',
-                        '现在有多少张表', '查询.*多少张表', '查询.*表.*数量'
+                        '现在有多少张表', '查询多少张表', '查询表数量'
                     ]
 
                     for pattern in table_count_patterns:
-                        if pattern in question_lower or (pattern.startswith('查询') and any(p in question_lower for p in pattern.split('.*'))):
+                        if pattern in question_lower:
                             logger.info(f"⚡ Fast path matched table count pattern: {pattern}")
                             return "SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = DATABASE();"
 

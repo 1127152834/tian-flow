@@ -26,10 +26,12 @@ function SystemOverview() {
   });
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
   const [syncTaskId, setSyncTaskId] = useState<string | null>(null);
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncMessage, setSyncMessage] = useState('');
   const [syncStep, setSyncStep] = useState('');
+  const [discoveryResult, setDiscoveryResult] = useState<any>(null);
   const [websocket, setWebsocket] = useState<WebSocket | null>(null);
 
   useEffect(() => {
@@ -213,6 +215,34 @@ function SystemOverview() {
     }
   };
 
+  const handleDiscoverResources = async () => {
+    try {
+      setDiscovering(true);
+      const result = await resourceDiscoveryApi.discoverResourcesManual();
+
+      if (result.success) {
+        setDiscoveryResult(result);
+        const summary = result.discovery_summary;
+        toast.success('资源发现完成', {
+          description: `发现 ${summary.total_discovered} 个资源：${summary.new_resources} 新增，${summary.existing_resources} 现有，${summary.missing_resources} 缺失`
+        });
+        // 刷新统计数据
+        fetchStatistics();
+      } else {
+        toast.error('资源发现失败', {
+          description: result.message || '无法发现系统资源'
+        });
+      }
+    } catch (error) {
+      console.error('Resource discovery failed:', error);
+      toast.error('资源发现失败', {
+        description: error instanceof Error ? error.message : '资源发现过程中发生错误'
+      });
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
   const handleFullSync = async () => {
     try {
       setSyncing(true);
@@ -291,17 +321,20 @@ function SystemOverview() {
       {/* 操作按钮 */}
       <div className="space-y-3">
         <div className="flex gap-2">
-          <Button onClick={handleSync} disabled={syncing}>
+          <Button onClick={handleDiscoverResources} disabled={syncing || discovering}>
+            {discovering ? '发现中...' : '发现资源'}
+          </Button>
+          <Button onClick={handleSync} disabled={syncing || discovering}>
             {syncing ? '增量同步中...' : '增量同步'}
           </Button>
           <Button
             variant="outline"
             onClick={() => handleFullSync()}
-            disabled={syncing}
+            disabled={syncing || discovering}
           >
             全量同步
           </Button>
-          <Button variant="outline" onClick={fetchStatistics} disabled={syncing}>
+          <Button variant="outline" onClick={fetchStatistics} disabled={syncing || discovering}>
             刷新数据
           </Button>
         </div>
@@ -309,11 +342,66 @@ function SystemOverview() {
         {/* 同步说明 */}
         <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
           <div className="space-y-1">
+            <div><strong>发现资源：</strong>手动扫描系统中的所有资源，显示新增、现有、缺失的资源状态</div>
             <div><strong>增量同步：</strong>智能检测资源变更，只同步新增、修改或删除的资源，速度快，推荐日常使用</div>
             <div><strong>全量同步：</strong>重新扫描所有资源并完全重建索引，耗时较长，适用于系统初始化或故障恢复</div>
           </div>
         </div>
       </div>
+
+      {/* 资源发现结果 */}
+      {discoveryResult && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">资源发现结果</CardTitle>
+            <CardDescription>
+              最近一次资源发现的详细结果
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* 统计概览 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-3 bg-green-50 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">
+                  {discoveryResult.discovery_summary.new_resources}
+                </div>
+                <div className="text-sm text-green-700">新增资源</div>
+              </div>
+              <div className="text-center p-3 bg-blue-50 rounded-lg">
+                <div className="text-2xl font-bold text-blue-600">
+                  {discoveryResult.discovery_summary.existing_resources}
+                </div>
+                <div className="text-sm text-blue-700">现有资源</div>
+              </div>
+              <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                <div className="text-2xl font-bold text-yellow-600">
+                  {discoveryResult.discovery_summary.missing_resources}
+                </div>
+                <div className="text-sm text-yellow-700">缺失资源</div>
+              </div>
+              <div className="text-center p-3 bg-purple-50 rounded-lg">
+                <div className="text-2xl font-bold text-purple-600">
+                  {discoveryResult.discovery_summary.total_discovered}
+                </div>
+                <div className="text-sm text-purple-700">总计发现</div>
+              </div>
+            </div>
+
+            {/* 向量化状态 */}
+            <div>
+              <h4 className="font-medium mb-2">向量化状态</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {Object.entries(discoveryResult.discovery_summary.vectorization_stats).map(([status, count]) => (
+                  <div key={status} className="flex items-center justify-between p-2 bg-muted rounded">
+                    <span className="text-sm capitalize">{status}</span>
+                    <Badge variant="outline">{count as number}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 同步进度提示 */}
       {syncing && (

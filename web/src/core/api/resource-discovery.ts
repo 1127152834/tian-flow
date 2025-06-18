@@ -245,6 +245,20 @@ export const resourceDiscoveryApi = {
     return response.json();
   },
 
+  // Manual Resource Discovery
+  async discoverResourcesManual(): Promise<any> {
+    const response = await fetch(resolveServiceURL(`${API_BASE}/discover-manual`), {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to discover resources manually');
+    }
+
+    return response.json();
+  },
+
   // Incremental Synchronization
   async incrementalSync(forceFullSync: boolean = false, asyncMode: boolean = true): Promise<any> {
     const response = await fetch(resolveServiceURL(`${API_BASE}/incremental-sync?force_full_sync=${forceFullSync}&async_mode=${asyncMode}`), {

@@ -493,7 +493,7 @@ class PgVectorStore:
             if 'conn' in locals():
                 conn.close()
     
-    def get_similar_question_sql(self, question: str, **kwargs) -> List[str]:
+    def get_similar_question_sql(self, question: str, **kwargs) -> List[Dict[str, str]]:
         """
         Get similar question-SQL pairs based on question (following ti-flow logic exactly)
 
@@ -502,7 +502,7 @@ class PgVectorStore:
             **kwargs: Additional parameters (limit, etc.)
 
         Returns:
-            List of similar SQL queries
+            List of dictionaries with 'question' and 'sql' keys
         """
         try:
             # Generate embedding for the question (following ti-flow logic)
@@ -533,7 +533,7 @@ class PgVectorStore:
                 with conn.cursor() as cursor:
                     # Use pgvector similarity search (similar to ti-flow's vec_cosine_distance)
                     cursor.execute("""
-                        SELECT sql_query
+                        SELECT question, sql_query
                         FROM text2sql.vanna_embeddings
                         WHERE datasource_id = %s
                         AND content_type = 'SQL'
@@ -544,7 +544,10 @@ class PgVectorStore:
                     """, (self.datasource_id, embedding, limit))
 
                     results = cursor.fetchall()
-                    similar_sqls = [row['sql_query'] for row in results if row['sql_query']]
+                    similar_sqls = [
+                        {'question': row['question'] or '', 'sql': row['sql_query']}
+                        for row in results if row['sql_query']
+                    ]
 
                     logger.info(f"Found {len(similar_sqls)} similar SQL queries using vector similarity for question: {question[:50]}...")
                     return similar_sqls
@@ -561,7 +564,7 @@ class PgVectorStore:
             logger.error(f"Failed to get similar question SQL: {e}")
             return []
 
-    def _fallback_similarity_search(self, question: str, limit: int = 3) -> List[str]:
+    def _fallback_similarity_search(self, question: str, limit: int = 3) -> List[Dict[str, str]]:
         """Fallback similarity search using in-memory data"""
         try:
             # Search in our in-memory VannaEmbedding records
@@ -577,7 +580,10 @@ class PgVectorStore:
                 return []
 
             # For fallback, just return the first few SQL queries
-            similar_sqls = [record["sql_query"] for record in sql_records[:limit]]
+            similar_sqls = [
+                {'question': record.get("question", ""), 'sql': record["sql_query"]}
+                for record in sql_records[:limit]
+            ]
             logger.info(f"Fallback: Found {len(similar_sqls)} SQL queries for question: {question[:50]}...")
             return similar_sqls
 

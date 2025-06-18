@@ -424,12 +424,38 @@ def smart_text2sql_query(
         # 创建SQL生成请求
         request = SQLGenerationRequest(
             question=question,
-            datasource_id=database_id or 1,
+            datasource_id=database_id or 8,  # 默认使用傲雷仓储中心库
             include_explanation=True
         )
 
-        # 生成SQL
-        generation_result = asyncio.run(text2sql_service.generate_sql(request))
+        # 生成SQL - 使用同步方法避免事件循环问题
+        import threading
+
+        def run_async_in_thread(coro):
+            """在新线程中运行异步函数"""
+            result = None
+            exception = None
+
+            def target():
+                nonlocal result, exception
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    result = loop.run_until_complete(coro)
+                except Exception as e:
+                    exception = e
+                finally:
+                    loop.close()
+
+            thread = threading.Thread(target=target)
+            thread.start()
+            thread.join()
+
+            if exception:
+                raise exception
+            return result
+
+        generation_result = run_async_in_thread(text2sql_service.generate_sql(request))
 
         generated_sql = generation_result.generated_sql
         confidence = generation_result.confidence_score
@@ -440,7 +466,7 @@ def smart_text2sql_query(
             query_id=generation_result.query_id
         )
 
-        execution_result = asyncio.run(text2sql_service.execute_sql(execution_request))
+        execution_result = run_async_in_thread(text2sql_service.execute_sql(execution_request))
 
         if execution_result.status.value == "success":
             results = execution_result.result_data or []
@@ -477,7 +503,15 @@ def smart_text2sql_query(
 
             if chart_config:
                 # 异步推送图表（不等待完成）
-                asyncio.create_task(_push_chart_async(chart_config))
+                try:
+                    # 尝试在当前事件循环中创建任务
+                    asyncio.create_task(_push_chart_async(chart_config))
+                except RuntimeError:
+                    # 如果没有事件循环，在新线程中推送
+                    threading.Thread(
+                        target=lambda: run_async_in_thread(_push_chart_async(chart_config)),
+                        daemon=True
+                    ).start()
 
                 message += f"，{chart_config['type']}图表正在生成中..."
                 response_data["chart_info"] = {

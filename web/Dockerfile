@@ -6,13 +6,13 @@ WORKDIR /app
 
 
 # Install dependencies based on the preferred package manager
+COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
 
-COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml\* ./
-
+# Use npm ci for faster, reliable, reproducible builds
 RUN \
-    if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-    elif [ -f package-lock.json ]; then npm ci; \
-    elif [ -f pnpm-lock.yaml ]; then npm install -g pnpm && pnpm i; \
+    if [ -f yarn.lock ]; then yarn --frozen-lockfile --network-timeout 300000; \
+    elif [ -f package-lock.json ]; then npm ci --only=production --no-audit --no-fund; \
+    elif [ -f pnpm-lock.yaml ]; then npm install -g pnpm && pnpm i --frozen-lockfile; \
     else echo "Lockfile not found." && exit 1; \
     fi
 
@@ -35,21 +35,29 @@ RUN \
 
 ##### RUNNER
 
-FROM gcr.io/distroless/nodejs20-debian12 AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Create a non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy the built application
 COPY --from=builder /app/next.config.js ./
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
 
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+# Automatically leverage output traces to reduce image size
+# https://nextjs.org/docs/advanced-features/output-file-tracing
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
 
 EXPOSE 3000
 ENV PORT=3000
 
-CMD ["server.js"]
+CMD ["node", "server.js"]

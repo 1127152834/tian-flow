@@ -20,7 +20,7 @@ export default function Main() {
   return (
     <div
       className={cn(
-        "flex h-full w-full justify-center px-4 pt-12 pb-4",
+        "flex h-full w-full justify-center-safe px-4 pt-12 pb-4",
         doubleColumnMode && "gap-8",
       )}
     >
@@ -28,13 +28,13 @@ export default function Main() {
         className={cn(
           "shrink-0 transition-all duration-300 ease-out",
           !doubleColumnMode &&
-            `w-[min(1400px,95vw)] mx-auto`,
+            `w-[min(1200px,90vw)] mx-auto`,
           doubleColumnMode && `w-[min(800px,45vw)]`,
         )}
       />
       <ResearchBlock
         className={cn(
-          "w-[min(1000px,45vw)] pb-4 transition-all duration-300 ease-out",
+          "w-[min(max(calc((100vw-538px)*0.75),575px),960px)] pb-4 transition-all duration-300 ease-out",
           !doubleColumnMode && "scale-0",
           doubleColumnMode && "",
         )}

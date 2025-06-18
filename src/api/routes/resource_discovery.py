@@ -570,7 +570,7 @@ async def detect_resource_changes(
         raise HTTPException(status_code=500, detail=f"检测资源变更失败: {str(e)}")
 
 
-@router.post("/discover", response_model=dict)
+@router.post("/discover-manual", response_model=dict)
 async def discover_resources_manual():
     """手动发现系统资源"""
     try:
@@ -587,6 +587,7 @@ async def discover_resources_manual():
             discovered_resources = await discovery_service.discover_all_resources(session)
 
             # 获取已注册的资源
+            from sqlalchemy import text
             existing_query = text("""
                 SELECT resource_id, resource_name, resource_type, vectorization_status,
                        created_at, updated_at

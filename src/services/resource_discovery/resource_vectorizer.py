@@ -218,7 +218,7 @@ class ResourceVectorizer:
             logger.info(f"开始向量化资源: {resource_id} (类型: {resource_type})")
             
             # 根据资源类型选择不同的向量化策略
-            if resource_type == "text2sql":
+            if resource_type == "TEXT2SQL" or str(resource_type) == "ResourceType.TEXT2SQL":
                 vectors = await self._vectorize_text2sql_resource(resource)
             else:
                 vectors = await self._vectorize_normal_resource(resource)
@@ -227,8 +227,10 @@ class ResourceVectorizer:
             saved_vectors = []
             for vector_type, vector_data in vectors.items():
                 try:
+                    # 确保 vector_type 是字符串
+                    vector_type_str = vector_type.value if hasattr(vector_type, 'value') else str(vector_type)
                     vector_record = await self._save_vector_to_db(
-                        session, resource_id, vector_type, vector_data
+                        session, resource_id, vector_type_str, vector_data
                     )
                     if vector_record:
                         saved_vectors.append(vector_type)

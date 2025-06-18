@@ -734,9 +734,39 @@ async def get_statistics(
             "negative_feedback": match_row.negative_feedback or 0
         }
 
+        # 详细的向量化状态统计
+        vectorization_query = text("""
+            SELECT
+                vectorization_status,
+                COUNT(*) as count
+            FROM resource_discovery.resource_registry
+            GROUP BY vectorization_status
+        """)
+
+        vectorization_result = session.execute(vectorization_query)
+        vectorization_breakdown = {}
+
+        for row in vectorization_result.fetchall():
+            vectorization_breakdown[row.vectorization_status] = row.count
+
+        # 总计统计
+        total_resources = sum(stat["total"] for stat in resource_stats.values())
+        total_vectorized = sum(stat["vectorized"] for stat in resource_stats.values())
+
         return {
             "resource_statistics": resource_stats,
             "match_statistics": match_stats,
+            "vectorization_breakdown": vectorization_breakdown,
+            "summary": {
+                "total_resources": total_resources,
+                "total_vectorized": total_vectorized,
+                "vectorization_rate": round(total_vectorized / total_resources * 100, 1) if total_resources > 0 else 0
+            },
+            "data_sources": {
+                "resource_data": "resource_discovery.resource_registry",
+                "match_data": "resource_discovery.resource_match_history (last 30 days)",
+                "last_sync": "Based on system_status table"
+            },
             "last_updated": datetime.utcnow().isoformat()
         }
 

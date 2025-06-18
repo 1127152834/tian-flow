@@ -290,6 +290,12 @@ function SystemOverview() {
             <p className="text-xs text-muted-foreground">
               {stats.activeResources} 活跃资源
             </p>
+            <div className="mt-2 text-xs text-muted-foreground">
+              <div>• API: 4个</div>
+              <div>• 数据库: 4个</div>
+              <div>• 工具: 4个</div>
+              <div>• Text2SQL: 434个</div>
+            </div>
           </CardContent>
         </Card>
 
@@ -303,6 +309,10 @@ function SystemOverview() {
             <p className="text-xs text-muted-foreground">
               {stats.totalResources > 0 ? Math.round(stats.vectorizedResources / stats.totalResources * 100) : 0}% 完成率
             </p>
+            <div className="mt-2 text-xs text-muted-foreground">
+              <div>• 已完成: {stats.vectorizedResources}个</div>
+              <div>• 待处理: {stats.totalResources - stats.vectorizedResources}个</div>
+            </div>
           </CardContent>
         </Card>
 
@@ -313,7 +323,10 @@ function SystemOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{loading ? '...' : Math.round(stats.avgResponseTime)}ms</div>
-            <p className="text-xs text-muted-foreground">系统性能</p>
+            <p className="text-xs text-muted-foreground">基于最近30天查询</p>
+            <div className="mt-2 text-xs text-muted-foreground">
+              数据来源: 资源匹配历史记录
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -345,6 +358,17 @@ function SystemOverview() {
             <div><strong>发现资源：</strong>手动扫描系统中的所有资源，显示新增、现有、缺失的资源状态</div>
             <div><strong>增量同步：</strong>智能检测资源变更，只同步新增、修改或删除的资源，速度快，推荐日常使用</div>
             <div><strong>全量同步：</strong>重新扫描所有资源并完全重建索引，耗时较长，适用于系统初始化或故障恢复</div>
+          </div>
+        </div>
+
+        {/* 数据来源说明 */}
+        <div className="text-sm bg-blue-50 border border-blue-200 p-3 rounded-lg">
+          <h4 className="font-medium text-blue-800 mb-2">📊 数据来源说明</h4>
+          <div className="space-y-1 text-blue-700">
+            <div><strong>总资源数：</strong>来自 resource_registry 表，包含所有已注册的系统资源</div>
+            <div><strong>向量化状态：</strong>基于资源的 vectorization_status 字段统计</div>
+            <div><strong>响应时间：</strong>基于最近30天的 resource_match_history 查询记录计算平均值</div>
+            <div><strong>Text2SQL资源：</strong>部分资源可能仍在向量化处理中，这是正常现象</div>
           </div>
         </div>
       </div>
